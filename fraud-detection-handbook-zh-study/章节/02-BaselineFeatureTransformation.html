@@ -1,0 +1,2444 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>逐行构造交易特征｜源码逐行精读</title><link rel="stylesheet" href="../assets/reading.css"><script>window.MathJax={"tex": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "displayMath": [["$$", "$$"], ["\\[", "\\]"]], "processEscapes": true}, "options": {"skipHtmlTags": ["script", "noscript", "style", "textarea", "pre", "code"]}, "svg": {"fontCache": "local"}};</script><script defer src="../assets/mathjax-tex-svg-full.js"></script><script defer src="../assets/reading.js"></script></head><body><div class="top"><a href="../开始精读.html">← 全课程目录</a><span>源代码逐行精读 / 02</span><a href="#top">回到页首</a></div><div class="shell"><aside class="sidebar"><label for="toc-filter">查找本页函数或代码</label><input id="toc-filter" data-toc-filter placeholder="例如 append / get_train"><div class="search-status">共 20 个原始代码单元格</div><a data-toc-item href="#cell-4"><span class="mini">原单元格 4</span><br>!curl -O https://raw.githubusercontent.com/Fraud-Detection-Handbook/fraud-de…</a><a data-toc-item href="#cell-6"><span class="mini">原单元格 6</span><br>DIR_INPUT=&#x27;./simulated-data-raw/data/&#x27; BEGIN_DATE = &quot;2018-04-01&quot; END_DATE = …</a><a data-toc-item href="#cell-7"><span class="mini">原单元格 7</span><br>transactions_df.head()</a><a data-toc-item href="#cell-9"><span class="mini">原单元格 9</span><br>is_weekend</a><a data-toc-item href="#cell-11"><span class="mini">原单元格 11</span><br>%time transactions_df[&#x27;TX_DURING_WEEKEND&#x27;]=transactions_df.TX_DATETIME.apply…</a><a data-toc-item href="#cell-13"><span class="mini">原单元格 13</span><br>is_night</a><a data-toc-item href="#cell-14"><span class="mini">原单元格 14</span><br>%time transactions_df[&#x27;TX_DURING_NIGHT&#x27;]=transactions_df.TX_DATETIME.apply(i…</a><a data-toc-item href="#cell-16"><span class="mini">原单元格 16</span><br>transactions_df[transactions_df.TX_TIME_DAYS&gt;=30]</a><a data-toc-item href="#cell-19"><span class="mini">原单元格 19</span><br>get_customer_spending_behaviour_features</a><a data-toc-item href="#cell-21"><span class="mini">原单元格 21</span><br>spending_behaviour_customer_0=get_customer_spending_behaviour_features(trans…</a><a data-toc-item href="#cell-23"><span class="mini">原单元格 23</span><br>%time transactions_df=transactions_df.groupby(&#x27;CUSTOMER_ID&#x27;).apply(lambda x:…</a><a data-toc-item href="#cell-24"><span class="mini">原单元格 24</span><br>transactions_df</a><a data-toc-item href="#cell-27"><span class="mini">原单元格 27</span><br>get_count_risk_rolling_window</a><a data-toc-item href="#cell-28"><span class="mini">原单元格 28</span><br>transactions_df[transactions_df.TX_FRAUD==1]</a><a data-toc-item href="#cell-30"><span class="mini">原单元格 30</span><br>transactions_df[transactions_df.TX_FRAUD==0].TERMINAL_ID[0]</a><a data-toc-item href="#cell-31"><span class="mini">原单元格 31</span><br>get_count_risk_rolling_window(transactions_df[transactions_df.TERMINAL_ID==3…</a><a data-toc-item href="#cell-33"><span class="mini">原单元格 33</span><br>%time transactions_df=transactions_df.groupby(&#x27;TERMINAL_ID&#x27;).apply(lambda x:…</a><a data-toc-item href="#cell-34"><span class="mini">原单元格 34</span><br>transactions_df</a><a data-toc-item href="#cell-36"><span class="mini">原单元格 36</span><br>DIR_OUTPUT = &quot;./simulated-data-transformed/&quot; if not os.path.exists(DIR_OUTPU…</a><a data-toc-item href="#cell-38"><span class="mini">原单元格 38</span><br>空代码单元格</a></aside><main class="main"><header class="hero" id="top"><div class="kicker">SOURCE READING · 02</div><h1>逐行构造交易特征</h1><p><code>Chapter_3_GettingStarted/BaselineFeatureTransformation.ipynb</code></p><div class="facts"><span class="pill">20 个代码单元格</span><span class="pill">122 行原始代码</span><span class="pill">原顺序 · 原代码 · 原输出</span></div><p>这一份原笔记本接住模拟交易明细，先添加时间标记，再按客户和终端计算历史窗口。它没有训练模型。阅读主线是：原始一行交易有哪些列 → 每个特征依赖哪些当时可知的信息 → 分组函数怎样返回新列 → 按日保存。</p><a class="jump" href="../精读笔记本/Chapter_3_GettingStarted/BaselineFeatureTransformation.%E7%B2%BE%E8%AF%BB.ipynb">打开对应 .ipynb 阅读副本</a><div class="notice"><strong>阅读标记：</strong>每个“原单元格”编号是原文件位置，不是 In[n] 执行计数。函数体说明指实际调用到那一行时的行为。手工例子与原书历史输出明确分开；本次未运行原教材、未改动原项目。</div></header><details class="original" id="original-1"><summary>原单元格 1 · Baseline feature transformation</summary><div class="original-content"><p>(Baseline_Feature_Transformation)=</p>
+<h1>Baseline feature transformation</h1></div></details><details class="original" id="original-2"><summary>原单元格 2 · 原书说明</summary><div class="original-content"><p>The simulated dataset generated in the previous section is simple. It only contains the essential features that characterize a payment card transaction. These are: a unique identifier for the transaction, the date and time of the transaction, the transaction amount, a unique identifier for the customer, a unique number for the merchant, and a binary variable that labels the transaction as legitimate or fraudulent (0 for legitimate or 1 for fraudulent). Fig. 1 provides the first three rows of the simulated dataset:</p>
+<p><img alt="alt text" src="../原书资源/Chapter_3_GettingStarted/images/tx_table.png"/></p>
+<p>
+Fig. 1. The first three transactions in the simulated dataset used in this chapter.
+</p></div></details><details class="original" id="original-3"><summary>原单元格 3 · 原书说明</summary><div class="original-content"><p>What each row essentially summarizes is that, at 00:00:31, on the 1st of April 2018, a customer with ID 596 made a payment of a value of 57.19 to a merchant with ID 3156, and that the transaction was not fraudulent. Then, at 00:02:10, on the 1st of April 2018, a customer with ID 4961 made a payment of a value of 81.51 to a merchant with ID 3412, and that the transaction was not fraudulent. And so on. The simulated dataset is a long list of such transactions (1.8 million in total). The variable <code>transaction_ID</code> is a unique identifier for each transaction.  </p>
+<p>While conceptually simple for a human, such a set of features is however not appropriate for a machine learning predictive model. Machine learning algorithms typically require <em>numerical</em> and <em>ordered</em> features. Numerical means that the type of the variable must be an integer or a real number. Ordered means that the order of the values of a variable is meaningful. </p>
+<p>In this dataset, the only numerical and ordered features are the transaction amount and the fraud label. The date is a Panda timestamp, and therefore not numerical. The identifiers for the transactions, customers, and terminals are numerical but not ordered: it would not make sense to assume for example that the terminal with ID 3548 is 'bigger' or 'larger' than the terminal with ID 1983. Rather, these identifiers represent distinct 'entities', which are referred to as <em>categorical</em> features. </p>
+<p>There is unfortunately no standard procedure to deal with non-numerical or categorical features. The topic is known in the machine learning literature as <em>feature engineering</em> or <em>feature transformation</em>. In essence, the goal of feature engineering is to design new features that are assumed to be relevant for a predictive problem. The design of these features is usually problem-dependent, and involves domain knowledge.</p>
+<p>In this section, we will implement three types of feature transformation that are known to be relevant for payment card fraud detection.</p>
+<p><img alt="encoding" src="../原书资源/Chapter_3_GettingStarted/images/encoding_variables.png"/></p>
+<p>The first type of transformation involves the date/time variable, and consists in creating binary features that characterize potentially relevant periods. We will create two such features. The first one will characterize whether a transaction occurs during a weekday or during the weekend. The second will characterize whether a transaction occurs during the day or the night. These features can be useful since it has been observed in real-world datasets that fraudulent patterns differ between weekdays and weekends, and between the day and night.  </p>
+<p>The second type of transformation involves the customer ID and consists in creating features that characterize the customer spending behaviors. We will follow the RFM (Recency, Frequency, Monetary value) framework proposed in {cite}<code>VANVLASSELAER201538</code>, and keep track of the average spending amount and number of transactions for each customer and for three window sizes. This will lead to the creation of six new features.</p>
+<p>The third type of transformation involves the terminal ID and consists in creating new features that characterize the 'risk' associated with the terminal. The risk will be defined as the average number of frauds that were observed on the terminal for three window sizes. This will lead to the creation of three new features. </p>
+<p>The table below summarizes the types of transformation that will be performed and the new features that will be created. </p>
+<table>
+<thead>
+<tr>
+<th>Original feature name</th>
+<th>Original feature type</th>
+<th>Transformation</th>
+<th>Number of new features</th>
+<th>New feature(s) type</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>TX_DATE_TIME</td>
+<td>Panda timestamp</td>
+<td>0 if transaction during a weekday, 1 if transaction during a weekend. The new feature is called TX_DURING_WEEKEND.</td>
+<td>1</td>
+<td>Integer (0/1)</td>
+</tr>
+<tr>
+<td>TX_DATE_TIME</td>
+<td>Panda timestamp</td>
+<td>0 if transaction between 6am and 0pm, 1 if transaction between 0pm and 6am. The new feature is called TX_DURING_NIGHT.</td>
+<td>1</td>
+<td>Integer (0/1)</td>
+</tr>
+<tr>
+<td>CUSTOMER_ID</td>
+<td>Categorical variable</td>
+<td>Number of transactions by the customer in the last n day(s), for n in {1,7,30}. The new features are called CUSTOMER_ID_NB_TX_nDAY_WINDOW.</td>
+<td>3</td>
+<td>Integer</td>
+</tr>
+<tr>
+<td>CUSTOMER_ID</td>
+<td>Categorical variable</td>
+<td>Average spending amount in the last n day(s), for n in {1,7,30}. The new features are called CUSTOMER_ID_AVG_AMOUNT_nDAY_WINDOW.</td>
+<td>3</td>
+<td>Real</td>
+</tr>
+<tr>
+<td>TERMINAL_ID</td>
+<td>Categorical variable</td>
+<td>Number of transactions on the terminal in the last n+d day(s), for n in {1,7,30} and d=7. The parameter d is called delay and will be discussed later in this notebook. The new features are called TERMINAL_ID_NB_TX_nDAY_WINDOW.</td>
+<td>3</td>
+<td>Integer</td>
+</tr>
+<tr>
+<td>TERMINAL_ID</td>
+<td>Categorical variable</td>
+<td>Average number of frauds on the terminal in the last n+d day(s), for n in {1,7,30} and d=7. The parameter d is called delay and will be discussed later in this notebook. The new features are called TERMINAL_ID_RISK_nDAY_WINDOW.</td>
+<td>3</td>
+<td>Real</td>
+</tr>
+</tbody>
+</table>
+<p>The following sections provide the implementation for each of these three transformations. After the transformations, a set of 14 new features will be created. Note that some of the features are the result of aggregation functions over the values of other features or conditions (same customer, given time window). These features are often referred to as <em>aggregated features</em>.</p></div></details><article class="cell" id="cell-4" data-cell="4"><div class="tag">原单元格 4 · 10 行 · 专项补注 + 逐行语法</div><h2 class="cell-title">!curl -O https://raw.githubusercontent.com/Fraud-Detection-Handbook/fraud-de…</h2><p><strong>这格解决什么：</strong> 加载公共函数，并在需要时获取原始模拟数据。</p><div class="states"><div class="state"><strong>执行前</strong><p>Notebook 环境应能执行 IPython 命令；目录和依赖是否就绪不能只凭代码断定。</p></div><div class="state"><strong>执行后</strong><p>实际执行后，公共函数和导入名称进入当前会话；满足条件时会发生下载和仓库克隆。此精读页面不会执行这些命令。</p></div></div><h3>原代码 · 保持原样</h3><pre class="source"><span class="sr-only">原始代码，行号仅供定位。</span><span class="code-line"><span class="line-no">001</span><code># Initialization: Load shared functions and simulated data </code></span><span class="code-line"><span class="line-no">002</span><code> </code></span><span class="code-line"><span class="line-no">003</span><code># Load shared functions</code></span><span class="code-line"><span class="line-no">004</span><code>!curl -O https://raw.githubusercontent.com/Fraud-Detection-Handbook/fraud-detection-handbook/main/Chapter_References/shared_functions.py</code></span><span class="code-line"><span class="line-no">005</span><code>%run shared_functions.py</code></span><span class="code-line"><span class="line-no">006</span><code> </code></span><span class="code-line"><span class="line-no">007</span><code># Get simulated data from Github repository</code></span><span class="code-line"><span class="line-no">008</span><code>if not os.path.exists(&quot;simulated-data-raw&quot;):</code></span><span class="code-line"><span class="line-no">009</span><code>    !git clone https://github.com/Fraud-Detection-Handbook/simulated-data-raw</code></span><span class="code-line"><span class="line-no">010</span><code>        </code></span></pre><div class="walkthrough"><h3>顺着代码看数据怎样变化</h3><p>按顺序读三件事：<code>!curl -O ...</code> 让操作系统下载文件；<code>%run shared_functions.py</code> 执行这个文件；<code>if not os.path.exists(...)</code> 判断数据目录不存在时才进入克隆分支。<code>!</code> 和 <code>%</code> 都是 Notebook 提供的扩展语法，不能原样当作普通 Python 脚本语法。</p>
+<p><code>read_from_files</code>、模型库等名称可能来自公共文件，因此不能因为本页开头没写某条 <code>import</code> 就判断后面的名称必然不存在。反过来，如果前面的下载或执行失败，也不能假设这些名称已经可用。这格是准备工作，没有生成新的客户交易特征。</p></div><h3>一行一行读 · 可展开符号解释</h3><div class="line-table-wrap"><table class="line-table"><thead><tr><th>原始代码 · 逐行定位</th><th>动作与状态变化</th></tr></thead><tbody><tr id="cell-4-line-1"><td class="codecell"><a class="row-label" href="#cell-4-line-1">第 1 行</a><pre><code># Initialization: Load shared functions and simulated data </code></pre></td><td><p class="scope">本行是注释，不执行。所在上下文：处于单元格顶层；真正执行本cell并到达此语句时才发生，静态精读本身不执行代码</p><p>原作者的说明性注释：Initialization: Load shared functions and simulated data</p><p>该行不执行赋值、计算或训练。注释与实际实现不一致时，需按代码核对。</p><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li>本行 <code>#</code> 注释供人阅读，不参与运算；字符串内部的 # 不是注释标记。</li>
+</ul></details></td></tr><tr id="cell-4-line-3"><td class="codecell"><a class="row-label" href="#cell-4-line-3">第 3 行</a><pre><code># Load shared functions</code></pre></td><td><p class="scope">本行是注释，不执行。所在上下文：处于单元格顶层；真正执行本cell并到达此语句时才发生，静态精读本身不执行代码</p><p>原作者的说明性注释：Load shared functions</p><p>该行不执行赋值、计算或训练。注释与实际实现不一致时，需按代码核对。</p><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li>本行 <code>#</code> 注释供人阅读，不参与运算；字符串内部的 # 不是注释标记。</li>
+</ul></details></td></tr><tr id="cell-4-line-4"><td class="codecell"><a class="row-label" href="#cell-4-line-4">第 4 行</a><pre><code>!curl -O https://raw.githubusercontent.com/Fraud-Detection-Handbook/fraud-detection-handbook/main/Chapter_References/shared_functions.py</code></pre></td><td><p class="scope">处于单元格顶层；真正执行本cell并到达此语句时才发生，静态精读本身不执行代码</p><p>这是一条 Notebook/IPython 扩展命令，不是普通 Python 表达式。以 ! 开头会调用系统命令；这里可能下载文件或克隆数据仓库，阅读本解析不会执行它。</p><p>只有你真正执行该单元格时才发生上述动作；本解析只说明原命令。</p><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li>本行 <code>#</code> 注释供人阅读，不参与运算；字符串内部的 # 不是注释标记。</li>
+</ul></details></td></tr><tr id="cell-4-line-5"><td class="codecell"><a class="row-label" href="#cell-4-line-5">第 5 行</a><pre><code>%run shared_functions.py</code></pre></td><td><p class="scope">处于单元格顶层；真正执行本cell并到达此语句时才发生，静态精读本身不执行代码</p><p>这是一条 Notebook/IPython 扩展命令，不是普通 Python 表达式。%run 会执行外部脚本并引入其定义。</p><p>只有你真正执行该单元格时才发生上述动作；本解析只说明原命令。</p><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li>本行 <code>#</code> 注释供人阅读，不参与运算；字符串内部的 # 不是注释标记。</li>
+</ul></details></td></tr><tr id="cell-4-line-7"><td class="codecell"><a class="row-label" href="#cell-4-line-7">第 7 行</a><pre><code># Get simulated data from Github repository</code></pre></td><td><p class="scope">本行是注释，不执行。所在上下文：处于单元格顶层；真正执行本cell并到达此语句时才发生，静态精读本身不执行代码</p><p>原作者的说明性注释：Get simulated data from Github repository</p><p>该行不执行赋值、计算或训练。注释与实际实现不一致时，需按代码核对。</p><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li>本行 <code>#</code> 注释供人阅读，不参与运算；字符串内部的 # 不是注释标记。</li>
+</ul></details></td></tr><tr id="cell-4-line-8"><td class="codecell"><a class="row-label" href="#cell-4-line-8">第 8 行</a><pre><code>if not os.path.exists(&quot;simulated-data-raw&quot;):</code></pre></td><td><p class="scope">处于单元格顶层；真正执行本cell并到达此语句时才发生，静态精读本身不执行代码</p><p>判断条件：对条件取逻辑否定，作用对象是 <code>os.path.exists('simulated-data-raw')</code>。</p><p>条件成立才执行相应缩进分支，不成立则转到后续 elif/else 或跳过。</p><ul>
+<li>求值 <code>os.path.exists('simulated-data-raw')</code>：检查路径是否存在，返回布尔值。传入：位置参数1是 <code>'simulated-data-raw'</code></li>
+<li>求值 <code>not os.path.exists('simulated-data-raw')</code>：对条件取逻辑否定，作用对象是 <code>os.path.exists('simulated-data-raw')</code></li>
+</ul><ul>
+<li>调用 <code>os.path.exists</code> 时的位置参数1：<code>'simulated-data-raw'</code>；先求出该表达式再传入</li>
+</ul><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li>点号从左侧对象或模块中取属性/方法；后接 <code>(...)</code> 才是在调用可调用成员。</li>
+<li>圆括号在可调用表达式后可表示调用，也可用于运算分组、元组或类的基类声明；应结合当前语句。</li>
+<li>冒号在语句末尾引出缩进块，在方括号内可表示切片，在字典内分隔键和值。</li>
+</ul></details></td></tr><tr id="cell-4-line-9"><td class="codecell"><a class="row-label" href="#cell-4-line-9">第 9 行</a><pre><code>    !git clone https://github.com/Fraud-Detection-Handbook/simulated-data-raw</code></pre></td><td><p class="scope">仅在条件 `not os.path.exists(&#x27;simulated-data-raw&#x27;)` 成立的分支中执行</p><p>这是一条 Notebook/IPython 扩展命令，不是普通 Python 表达式。以 ! 开头会调用系统命令；这里可能下载文件或克隆数据仓库，阅读本解析不会执行它。</p><p>只有你真正执行该单元格时才发生上述动作；本解析只说明原命令。</p><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li>本行 <code>#</code> 注释供人阅读，不参与运算；字符串内部的 # 不是注释标记。</li>
+<li>行首缩进说明它处于某个函数、循环、分支或括号续行中；不要仅看视觉对齐就判断执行次数。</li>
+</ul></details></td></tr></tbody></table></div><details class="historical"><summary>原书保存的历史输出 · 本次未运行</summary><p class="muted">以下内容原本就在 Notebook 文件中；其中的数字、图、警告与耗时不代表你当前电脑的运行结果。</p><pre class="historic-text">  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+100 31567  100 31567    0     0   135k      0 --:--:-- --:--:-- --:--:--  135k
+Cloning into &#x27;simulated-data-raw&#x27;...
+remote: Enumerating objects: 189, done.[K
+remote: Counting objects: 100% (189/189), done.[K
+remote: Compressing objects: 100% (187/187), done.[K
+remote: Total 189 (delta 0), reused 186 (delta 0), pack-reused 0[K
+Receiving objects: 100% (189/189), 28.04 MiB | 3.13 MiB/s, done.
+</pre></details><div class="cell-nav"><span></span><a href="#cell-6">下一格代码 →</a></div></article><details class="original" id="original-5"><summary>原单元格 5 · Loading of dataset</summary><div class="original-content"><h2>Loading of dataset</h2>
+<p>Let us first load the transaction data simulated in the previous notebook. We will load the transaction files from April to September. Files can be loaded using the <code>read_from_files</code> function in the <a href="20-shared_functions.html#original-1">shared functions</a> notebook. The function was put in this notebook since it will be used frequently throughout this book.</p>
+<p>The function takes as input the folder where the data files are located, and the dates that define the period to load (between <code>BEGIN_DATE</code> and <code>END_DATE</code>). It returns a DataFrame of transactions. The transactions are sorted by chronological order. </p></div></details><article class="cell" id="cell-6" data-cell="6"><div class="tag">原单元格 6 · 8 行 · 专项补注 + 逐行语法</div><h2 class="cell-title">DIR_INPUT=&#x27;./simulated-data-raw/data/&#x27; BEGIN_DATE = &quot;2018-04-01&quot; END_DATE = …</h2><p><strong>这格解决什么：</strong> 把指定日期范围内保存的交易文件读成一张交易表。</p><div class="states"><div class="state"><strong>执行前</strong><p>已有 read_from_files 函数，目录下应有按日期命名的数据文件。</p></div><div class="state"><strong>执行后</strong><p>transactions_df 引用读取结果；屏幕打印交易笔数和 TX_FRAUD 求和得到的欺诈笔数。</p></div></div><h3>原代码 · 保持原样</h3><pre class="source"><span class="sr-only">原始代码，行号仅供定位。</span><span class="code-line"><span class="line-no">001</span><code>DIR_INPUT=&#x27;./simulated-data-raw/data/&#x27; </code></span><span class="code-line"><span class="line-no">002</span><code> </code></span><span class="code-line"><span class="line-no">003</span><code>BEGIN_DATE = &quot;2018-04-01&quot;</code></span><span class="code-line"><span class="line-no">004</span><code>END_DATE = &quot;2018-09-30&quot;</code></span><span class="code-line"><span class="line-no">005</span><code> </code></span><span class="code-line"><span class="line-no">006</span><code>print(&quot;Load  files&quot;)</code></span><span class="code-line"><span class="line-no">007</span><code>%time transactions_df=read_from_files(DIR_INPUT, BEGIN_DATE, END_DATE)</code></span><span class="code-line"><span class="line-no">008</span><code>print(&quot;{0} transactions loaded, containing {1} fraudulent transactions&quot;.format(len(transactions_df),transactions_df.TX_FRAUD.sum()))</code></span></pre><div class="walkthrough"><h3>顺着代码看数据怎样变化</h3><p><code>DIR_INPUT</code> 是路径字符串，<code>BEGIN_DATE</code> 和 <code>END_DATE</code> 也是字符串；它们此时不是时间对象。真正如何筛选文件由 <code>read_from_files</code> 的函数体决定，公共函数索引可以继续追进去。</p>
+<p><code>%time transactions_df=...</code> 先调用读取函数，再把返回表绑定给变量，同时显示耗时。<code>len(transactions_df)</code> 数表的行数；<code>transactions_df.TX_FRAUD.sum()</code> 将 0/1 标签相加，得到欺诈<strong>交易</strong>数，并不是欺诈客户数。假设人工小表标签是 <code>[0,1,1,0]</code>，这里显示总数 4、欺诈数 2；若两笔欺诈属于同一客户，受影响客户仍只有 1。这个小例子不是原书实际读取结果。</p></div><div class="dependencies"><strong>追踪被调用的教材函数</strong><p><a href="20-shared_functions.html#cell-6"><code>read_from_files</code> → 原单元格 6</a></p><small>链接优先当前笔记本的前置定义，其次公共函数。原环境若由外部脚本覆盖同名函数，还需核对实际绑定。</small></div><h3>一行一行读 · 可展开符号解释</h3><div class="line-table-wrap"><table class="line-table"><thead><tr><th>原始代码 · 逐行定位</th><th>动作与状态变化</th></tr></thead><tbody><tr id="cell-6-line-1"><td class="codecell"><a class="row-label" href="#cell-6-line-1">第 1 行</a><pre><code>DIR_INPUT=&#x27;./simulated-data-raw/data/&#x27; </code></pre></td><td><p class="scope">处于单元格顶层；真正执行本cell并到达此语句时才发生，静态精读本身不执行代码</p><p>先计算右侧：字符串 <code>./simulated-data-raw/data/</code>（文字，不是同名变量）。</p><p>把结果绑定到 <code>DIR_INPUT</code>。名称原来的引用被替换；若右侧只是另一个对象变量，这通常是共享引用，不是自动复制。</p><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li><code>=</code> 在赋值位置把右侧结果交给左侧；在调用的 <code>参数名=值</code> 中则指定参数，不是在比较。</li>
+</ul></details></td></tr><tr id="cell-6-line-3"><td class="codecell"><a class="row-label" href="#cell-6-line-3">第 3 行</a><pre><code>BEGIN_DATE = &quot;2018-04-01&quot;</code></pre></td><td><p class="scope">处于单元格顶层；真正执行本cell并到达此语句时才发生，静态精读本身不执行代码</p><p>先计算右侧：字符串 <code>2018-04-01</code>（文字，不是同名变量）。</p><p>把结果绑定到 <code>BEGIN_DATE</code>。名称原来的引用被替换；若右侧只是另一个对象变量，这通常是共享引用，不是自动复制。</p><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li><code>=</code> 在赋值位置把右侧结果交给左侧；在调用的 <code>参数名=值</code> 中则指定参数，不是在比较。</li>
+</ul></details></td></tr><tr id="cell-6-line-4"><td class="codecell"><a class="row-label" href="#cell-6-line-4">第 4 行</a><pre><code>END_DATE = &quot;2018-09-30&quot;</code></pre></td><td><p class="scope">处于单元格顶层；真正执行本cell并到达此语句时才发生，静态精读本身不执行代码</p><p>先计算右侧：字符串 <code>2018-09-30</code>（文字，不是同名变量）。</p><p>把结果绑定到 <code>END_DATE</code>。名称原来的引用被替换；若右侧只是另一个对象变量，这通常是共享引用，不是自动复制。</p><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li><code>=</code> 在赋值位置把右侧结果交给左侧；在调用的 <code>参数名=值</code> 中则指定参数，不是在比较。</li>
+</ul></details></td></tr><tr id="cell-6-line-6"><td class="codecell"><a class="row-label" href="#cell-6-line-6">第 6 行</a><pre><code>print(&quot;Load  files&quot;)</code></pre></td><td><p class="scope">处于单元格顶层；真正执行本cell并到达此语句时才发生，静态精读本身不执行代码</p><p>把结果显示出来；显示本身不等于将结果交给另一个变量。传入：位置参数1是 <code>'Load  files'</code>。</p><p>本行没有用等号把返回值另存到名称。若是对象方法可能有副作用；若是单元格最后一个表达式，Jupyter通常会显示其返回结果。</p><ul>
+<li>求值 <code>print('Load  files')</code>：把结果显示出来；显示本身不等于将结果交给另一个变量。传入：位置参数1是 <code>'Load  files'</code></li>
+</ul><ul>
+<li>调用 <code>print</code> 时的位置参数1：<code>'Load  files'</code>；先求出该表达式再传入</li>
+</ul><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li>圆括号在可调用表达式后可表示调用，也可用于运算分组、元组或类的基类声明；应结合当前语句。</li>
+</ul></details></td></tr><tr id="cell-6-line-7"><td class="codecell"><a class="row-label" href="#cell-6-line-7">第 7 行</a><pre><code>%time transactions_df=read_from_files(DIR_INPUT, BEGIN_DATE, END_DATE)</code></pre></td><td><p class="scope">处于单元格顶层；真正执行本cell并到达此语句时才发生，静态精读本身不执行代码</p><p>IPython 的 %time 会执行后面的语句并记录耗时；计时结果取决于运行环境。 先计算右侧：调用 <code>read_from_files</code>；它的返回值与副作用由此函数或类的定义决定，不能只凭名字推定数值。传入：位置参数1是 <code>DIR_INPUT</code>；位置参数2是 <code>BEGIN_DATE</code>；位置参数3是 <code>END_DATE</code>。</p><p>把结果绑定到 <code>transactions_df</code>。名称原来的引用被替换；若右侧只是另一个对象变量，这通常是共享引用，不是自动复制。</p><ul>
+<li>求值 <code>read_from_files(DIR_INPUT, BEGIN_DATE, END_DATE)</code>：调用 <code>read_from_files</code>；它的返回值与副作用由此函数或类的定义决定，不能只凭名字推定数值。传入：位置参数1是 <code>DIR_INPUT</code>；位置参数2是 <code>BEGIN_DATE</code>；位置参数3是 <code>END_DATE</code></li>
+</ul><ul>
+<li>调用 <code>read_from_files</code> 时的位置参数1：<code>DIR_INPUT</code>；先求出该表达式再传入</li>
+<li>调用 <code>read_from_files</code> 时的位置参数2：<code>BEGIN_DATE</code>；先求出该表达式再传入</li>
+<li>调用 <code>read_from_files</code> 时的位置参数3：<code>END_DATE</code>；先求出该表达式再传入</li>
+</ul><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li><code>=</code> 在赋值位置把右侧结果交给左侧；在调用的 <code>参数名=值</code> 中则指定参数，不是在比较。</li>
+<li>圆括号在可调用表达式后可表示调用，也可用于运算分组、元组或类的基类声明；应结合当前语句。</li>
+<li>逗号分隔参数、元素或解包目标，项目的先后顺序可能决定字段或维度对应。</li>
+<li><code>transactions_df</code>：交易明细 DataFrame，每行通常对应一笔交易</li>
+</ul></details></td></tr><tr id="cell-6-line-8"><td class="codecell"><a class="row-label" href="#cell-6-line-8">第 8 行</a><pre><code>print(&quot;{0} transactions loaded, containing {1} fraudulent transactions&quot;.format(len(transactions_df),transactions_df.TX_FRAUD.sum()))</code></pre></td><td><p class="scope">处于单元格顶层；真正执行本cell并到达此语句时才发生，静态精读本身不执行代码</p><p>把结果显示出来；显示本身不等于将结果交给另一个变量。传入：位置参数1是 <code>'{0} transactions loaded, containing {1} fraudulent transactions'.format(len(transactions_df), transactions_df.TX_FRAUD.sum())</code>。</p><p>本行没有用等号把返回值另存到名称。若是对象方法可能有副作用；若是单元格最后一个表达式，Jupyter通常会显示其返回结果。</p><ul>
+<li>求值 <code>len(transactions_df)</code>：取得对象长度：列表是元素数，DataFrame通常是行数。传入：位置参数1是 <code>transactions_df</code></li>
+<li>求值 <code>transactions_df.TX_FRAUD.sum()</code>：对指定数据或窗口求和；0/1标签求和可统计欺诈笔数。这里没有显式传入参数</li>
+<li>求值 <code>'{0} transactions loaded, containing {1} fraudulent transactions'.format(len(transactions_df), transactions_df.TX_FRAUD.sum())</code>：把给定值填入格式字符串的占位位置。传入：位置参数1是 <code>len(transactions_df)</code>；位置参数2是 <code>transactions_df.TX_FRAUD.sum()</code></li>
+<li>求值 <code>print('{0} transactions loaded, containing {1} fraudulent transactions'.format(len(transactions_df), transactions_df.TX_FRAUD.sum()))</code>：把结果显示出来；显示本身不等于将结果交给另一个变量。传入：位置参数1是 <code>'{0} transactions loaded, containing {1} fraudulent transactions'.format(len(transactions_df), transactions_df.TX_FRAUD.sum())</code></li>
+</ul><ul>
+<li>调用 <code>print</code> 时的位置参数1：<code>'{0} transactions loaded, containing {1} fraudulent transactions'.format(len(transactions_df), transactions_df.TX_FRAUD.sum())</code>；先求出该表达式再传入</li>
+<li>调用 <code>'{0} transactions loaded, containing {1} fraudulent transactions'.format</code> 时的位置参数1：<code>len(transactions_df)</code>；先求出该表达式再传入</li>
+<li>调用 <code>'{0} transactions loaded, containing {1} fraudulent transactions'.format</code> 时的位置参数2：<code>transactions_df.TX_FRAUD.sum()</code>；先求出该表达式再传入</li>
+<li>调用 <code>len</code> 时的位置参数1：<code>transactions_df</code>；先求出该表达式再传入</li>
+</ul><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li>点号从左侧对象或模块中取属性/方法；后接 <code>(...)</code> 才是在调用可调用成员。</li>
+<li>圆括号在可调用表达式后可表示调用，也可用于运算分组、元组或类的基类声明；应结合当前语句。</li>
+<li>逗号分隔参数、元素或解包目标，项目的先后顺序可能决定字段或维度对应。</li>
+<li><code>TX_FRAUD</code>：0/1 欺诈标签，属于监督目标或事后评估信息</li>
+<li><code>transactions_df</code>：交易明细 DataFrame，每行通常对应一笔交易</li>
+</ul></details></td></tr></tbody></table></div><details class="historical"><summary>原书保存的历史输出 · 本次未运行</summary><p class="muted">以下内容原本就在 Notebook 文件中；其中的数字、图、警告与耗时不代表你当前电脑的运行结果。</p><pre class="historic-text">Load  files
+CPU times: user 3.1 s, sys: 696 ms, total: 3.79 s
+Wall time: 4.13 s
+1754155 transactions loaded, containing 14681 fraudulent transactions
+</pre></details><div class="cell-nav"><a href="#cell-4">← 上一格代码</a><a href="#cell-7">下一格代码 →</a></div></article><article class="cell" id="cell-7" data-cell="7"><div class="tag">原单元格 7 · 1 行 · 专项补注 + 逐行语法</div><h2 class="cell-title">transactions_df.head()</h2><p><strong>这格解决什么：</strong> 查看读取结果前几行的列与值。</p><div class="states"><div class="state"><strong>执行前</strong><p>transactions_df 已存在。</p></div><div class="state"><strong>执行后</strong><p>head() 返回前五行或不足五行的全部行供展示；原表不被缩短。</p></div></div><h3>原代码 · 保持原样</h3><pre class="source"><span class="sr-only">原始代码，行号仅供定位。</span><span class="code-line"><span class="line-no">001</span><code>transactions_df.head()</code></span></pre><div class="walkthrough"><h3>顺着代码看数据怎样变化</h3><p>把 <code>transactions_df</code> 看成一本完整账册，<code>.head()</code> 是打开前几条记录。它没有把变量重新赋值，也没有删除后续交易。阅读输出时先认列名、索引和单元格类型；不要把左侧索引自动当成 <code>TRANSACTION_ID</code>。前五行只是样本，不能据此证明整个半年没有缺失值或异常值。</p></div><h3>一行一行读 · 可展开符号解释</h3><div class="line-table-wrap"><table class="line-table"><thead><tr><th>原始代码 · 逐行定位</th><th>动作与状态变化</th></tr></thead><tbody><tr id="cell-7-line-1"><td class="codecell"><a class="row-label" href="#cell-7-line-1">第 1 行</a><pre><code>transactions_df.head()</code></pre></td><td><p class="scope">处于单元格顶层；真正执行本cell并到达此语句时才发生，静态精读本身不执行代码</p><p>取前 n 行，默认前五行；用于查看不等于检查了全表。这里没有显式传入参数。</p><p>本行没有用等号把返回值另存到名称。若是对象方法可能有副作用；若是单元格最后一个表达式，Jupyter通常会显示其返回结果。</p><ul>
+<li>求值 <code>transactions_df.head()</code>：取前 n 行，默认前五行；用于查看不等于检查了全表。这里没有显式传入参数</li>
+</ul><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li>点号从左侧对象或模块中取属性/方法；后接 <code>(...)</code> 才是在调用可调用成员。</li>
+<li>圆括号在可调用表达式后可表示调用，也可用于运算分组、元组或类的基类声明；应结合当前语句。</li>
+<li><code>transactions_df</code>：交易明细 DataFrame，每行通常对应一笔交易</li>
+</ul></details></td></tr></tbody></table></div><details class="historical"><summary>原书保存的历史输出 · 本次未运行</summary><p class="muted">以下内容原本就在 Notebook 文件中；其中的数字、图、警告与耗时不代表你当前电脑的运行结果。</p><div class="historic-table"><div>
+
+<table border="1" class="dataframe">
+<thead>
+<tr>
+<th></th>
+<th>TRANSACTION_ID</th>
+<th>TX_DATETIME</th>
+<th>CUSTOMER_ID</th>
+<th>TERMINAL_ID</th>
+<th>TX_AMOUNT</th>
+<th>TX_TIME_SECONDS</th>
+<th>TX_TIME_DAYS</th>
+<th>TX_FRAUD</th>
+<th>TX_FRAUD_SCENARIO</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<th>0</th>
+<td>0</td>
+<td>2018-04-01 00:00:31</td>
+<td>596</td>
+<td>3156</td>
+<td>57.16</td>
+<td>31</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr>
+<th>1</th>
+<td>1</td>
+<td>2018-04-01 00:02:10</td>
+<td>4961</td>
+<td>3412</td>
+<td>81.51</td>
+<td>130</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr>
+<th>2</th>
+<td>2</td>
+<td>2018-04-01 00:07:56</td>
+<td>2</td>
+<td>1365</td>
+<td>146.00</td>
+<td>476</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr>
+<th>3</th>
+<td>3</td>
+<td>2018-04-01 00:09:29</td>
+<td>4128</td>
+<td>8737</td>
+<td>64.49</td>
+<td>569</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr>
+<th>4</th>
+<td>4</td>
+<td>2018-04-01 00:10:34</td>
+<td>927</td>
+<td>9906</td>
+<td>50.99</td>
+<td>634</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+</tr>
+</tbody>
+</table>
+</div></div></details><div class="cell-nav"><a href="#cell-6">← 上一格代码</a><a href="#cell-9">下一格代码 →</a></div></article><details class="original" id="original-8"><summary>原单元格 8 · Date and time transformations</summary><div class="original-content"><h2>Date and time transformations</h2>
+<p>We will create two new binary features from the transaction dates and times:</p>
+<ul>
+<li>The first will characterize whether a transaction occurs during a weekday (value 0) or a weekend (1), and will be called <code>TX_DURING_WEEKEND</code></li>
+<li>The second will characterize whether a transaction occurs during the day or during the day (0) or during the night (1). The night is defined as hours that are between 0pm and 6am. It will be called <code>TX_DURING_NIGHT</code>. </li>
+</ul>
+<p>For the <code>TX_DURING_WEEKEND</code> feature, we define a function <code>is_weekend</code> that takes as input a Panda timestamp, and returns 1 if the date is during a weekend, or 0 otherwise. The timestamp object conveniently provides the <code>weekday</code> function to help in computing this value.</p></div></details><article class="cell" id="cell-9" data-cell="9"><div class="tag">原单元格 9 · 8 行 · 专项补注 + 逐行语法</div><h2 class="cell-title">is_weekend</h2><p><strong>这格解决什么：</strong> 定义将单个时间转换为周末标记的函数。</p><div class="states"><div class="state"><strong>执行前</strong><p>输入约定是一个支持 weekday() 的日期时间对象。</p></div><div class="state"><strong>执行后</strong><p>执行 def 只登记 is_weekend；调用后才返回整数 0 或 1。</p></div></div><h3>原代码 · 保持原样</h3><pre class="source"><span class="sr-only">原始代码，行号仅供定位。</span><span class="code-line"><span class="line-no">001</span><code>def is_weekend(tx_datetime):</code></span><span class="code-line"><span class="line-no">002</span><code>    </code></span><span class="code-line"><span class="line-no">003</span><code>    # Transform date into weekday (0 is Monday, 6 is Sunday)</code></span><span class="code-line"><span class="line-no">004</span><code>    weekday = tx_datetime.weekday()</code></span><span class="code-line"><span class="line-no">005</span><code>    # Binary value: 0 if weekday, 1 if weekend</code></span><span class="code-line"><span class="line-no">006</span><code>    is_weekend = weekday&gt;=5</code></span><span class="code-line"><span class="line-no">007</span><code>    </code></span><span class="code-line"><span class="line-no">008</span><code>    return int(is_weekend)</code></span></pre><div class="walkthrough"><h3>顺着代码看数据怎样变化</h3><p>人工跟踪：传入星期日的某个时间 → <code>weekday()</code> 返回 6 → <code>weekday&gt;=5</code> 为 <code>True</code> → 局部变量 <code>is_weekend</code> 保存布尔值 True → <code>int(is_weekend)</code> 转成整数 1 → <code>return</code> 把 1 交还调用者。换成星期一，星期编号为 0，比较结果 False 转成整数 0。</p>
+<p>这份原代码没有写 if/else，而是直接保存比较结果，再用 int 转换。函数外的 <code>is_weekend</code> 是函数名称，函数内同名局部变量装布尔值；这个命名虽能运行，但初学时很容易混淆。函数体里的数值不会自动成为整张表的一列，下一次 <code>.apply(...)</code> 才逐个调用它。</p></div><h3>一行一行读 · 可展开符号解释</h3><div class="line-table-wrap"><table class="line-table"><thead><tr><th>原始代码 · 逐行定位</th><th>动作与状态变化</th></tr></thead><tbody><tr id="cell-9-line-1"><td class="codecell"><a class="row-label" href="#cell-9-line-1">第 1 行</a><pre><code>def is_weekend(tx_datetime):</code></pre></td><td><p class="scope">此处是函数 `is_weekend` 的定义签名；默认值表达式在到达定义时求值，函数体等待以后调用</p><p>定义函数 <code>is_weekend(tx_datetime)</code>。冒号后缩进的代码是它的函数体。</p><p>到达此定义时求值默认参数等定义期表达式，建立函数对象并绑定名称；不会因此执行函数体。函数体说明仅在以后调用并走到相应路径时成立。</p><ul>
+<li>定义参数 <code>tx_datetime</code>，本签名未给默认值，调用者需按参数规则提供</li>
+</ul><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li>def 后的外层圆括号列出定义参数，不是调用；其中默认表达式若含另一个函数调用，它仍在定义时求值。</li>
+<li>冒号在语句末尾引出缩进块，在方括号内可表示切片，在字典内分隔键和值。</li>
+</ul></details></td></tr><tr id="cell-9-line-3"><td class="codecell"><a class="row-label" href="#cell-9-line-3">第 3 行</a><pre><code>    # Transform date into weekday (0 is Monday, 6 is Sunday)</code></pre></td><td><p class="scope">本行是注释，不执行。所在上下文：此处是函数 `is_weekend` 的定义签名；默认值表达式在到达定义时求值，函数体等待以后调用</p><p>原作者的说明性注释：Transform date into weekday (0 is Monday, 6 is Sunday)</p><p>该行不执行赋值、计算或训练。注释与实际实现不一致时，需按代码核对。</p><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li>本行 <code>#</code> 注释供人阅读，不参与运算；字符串内部的 # 不是注释标记。</li>
+<li>行首缩进说明它处于某个函数、循环、分支或括号续行中；不要仅看视觉对齐就判断执行次数。</li>
+</ul></details></td></tr><tr id="cell-9-line-4"><td class="codecell"><a class="row-label" href="#cell-9-line-4">第 4 行</a><pre><code>    weekday = tx_datetime.weekday()</code></pre></td><td><p class="scope">仅在调用 `is_weekend` 并执行到本行时发生；仅执行 def 不执行这段函数体</p><p>先计算右侧：返回星期编号，周一0、周日6。这里没有显式传入参数。</p><p>把结果绑定到 <code>weekday</code>。名称原来的引用被替换；若右侧只是另一个对象变量，这通常是共享引用，不是自动复制。</p><ul>
+<li>求值 <code>tx_datetime.weekday()</code>：返回星期编号，周一0、周日6。这里没有显式传入参数</li>
+</ul><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li><code>=</code> 在赋值位置把右侧结果交给左侧；在调用的 <code>参数名=值</code> 中则指定参数，不是在比较。</li>
+<li>点号从左侧对象或模块中取属性/方法；后接 <code>(...)</code> 才是在调用可调用成员。</li>
+<li>圆括号在可调用表达式后可表示调用，也可用于运算分组、元组或类的基类声明；应结合当前语句。</li>
+<li>行首缩进说明它处于某个函数、循环、分支或括号续行中；不要仅看视觉对齐就判断执行次数。</li>
+</ul></details></td></tr><tr id="cell-9-line-5"><td class="codecell"><a class="row-label" href="#cell-9-line-5">第 5 行</a><pre><code>    # Binary value: 0 if weekday, 1 if weekend</code></pre></td><td><p class="scope">本行是注释，不执行。所在上下文：仅在调用 `is_weekend` 并执行到本行时发生；仅执行 def 不执行这段函数体</p><p>原作者的说明性注释：Binary value: 0 if weekday, 1 if weekend</p><p>该行不执行赋值、计算或训练。注释与实际实现不一致时，需按代码核对。</p><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li>本行 <code>#</code> 注释供人阅读，不参与运算；字符串内部的 # 不是注释标记。</li>
+<li>行首缩进说明它处于某个函数、循环、分支或括号续行中；不要仅看视觉对齐就判断执行次数。</li>
+</ul></details></td></tr><tr id="cell-9-line-6"><td class="codecell"><a class="row-label" href="#cell-9-line-6">第 6 行</a><pre><code>    is_weekend = weekday&gt;=5</code></pre></td><td><p class="scope">仅在调用 `is_weekend` 并执行到本行时发生；仅执行 def 不执行这段函数体</p><p>先计算右侧：判断<code>weekday</code> 是否大于或等于 <code>5</code>；标量比较通常给一个布尔值，数组或Series比较通常逐项给布尔值。</p><p>把结果绑定到 <code>is_weekend</code>。名称原来的引用被替换；若右侧只是另一个对象变量，这通常是共享引用，不是自动复制。</p><ul>
+<li>求值 <code>weekday &gt;= 5</code>：判断<code>weekday</code> 是否大于或等于 <code>5</code>；标量比较通常给一个布尔值，数组或Series比较通常逐项给布尔值</li>
+</ul><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li><code>=</code> 在赋值位置把右侧结果交给左侧；在调用的 <code>参数名=值</code> 中则指定参数，不是在比较。</li>
+<li>比较符生成判断结果；<code>==</code> 比较值是否相等，<code>=</code> 用于赋值或具名参数。</li>
+<li>行首缩进说明它处于某个函数、循环、分支或括号续行中；不要仅看视觉对齐就判断执行次数。</li>
+</ul></details></td></tr><tr id="cell-9-line-8"><td class="codecell"><a class="row-label" href="#cell-9-line-8">第 8 行</a><pre><code>    return int(is_weekend)</code></pre></td><td><p class="scope">仅在调用 `is_weekend` 并执行到本行时发生；仅执行 def 不执行这段函数体</p><p>计算要返回的内容：把输入转换为整数；浮点数转换时向零截去小数部分，不是取最接近的整数。传入：位置参数1是 <code>is_weekend</code>。</p><p>立即结束本次函数调用，把这个结果交回调用处；这次函数调用中后面的语句不再执行。返回表不等于自动写入磁盘。</p><ul>
+<li>求值 <code>int(is_weekend)</code>：把输入转换为整数；浮点数转换时向零截去小数部分，不是取最接近的整数。传入：位置参数1是 <code>is_weekend</code></li>
+</ul><ul>
+<li>调用 <code>int</code> 时的位置参数1：<code>is_weekend</code>；先求出该表达式再传入</li>
+</ul><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li>圆括号在可调用表达式后可表示调用，也可用于运算分组、元组或类的基类声明；应结合当前语句。</li>
+<li>行首缩进说明它处于某个函数、循环、分支或括号续行中；不要仅看视觉对齐就判断执行次数。</li>
+</ul></details></td></tr></tbody></table></div><details class="historical"><summary>原书保存的历史输出 · 本次未运行</summary><p class="muted">以下内容原本就在 Notebook 文件中；其中的数字、图、警告与耗时不代表你当前电脑的运行结果。</p><p class="muted">原文件没有为本格保存输出。这里不填造运行结果。</p></details><div class="cell-nav"><a href="#cell-7">← 上一格代码</a><a href="#cell-11">下一格代码 →</a></div></article><details class="original" id="original-10"><summary>原单元格 10 · 原书说明</summary><div class="original-content"><p>It is then straghtforward to compute this feature for all transactions using the Panda <code>apply</code> function. </p></div></details><article class="cell" id="cell-11" data-cell="11"><div class="tag">原单元格 11 · 1 行 · 专项补注 + 逐行语法</div><h2 class="cell-title">%time transactions_df[&#x27;TX_DURING_WEEKEND&#x27;]=transactions_df.TX_DATETIME.apply…</h2><p><strong>这格解决什么：</strong> 把周末函数应用到每笔交易，并写入新列。</p><div class="states"><div class="state"><strong>执行前</strong><p>TX_DATETIME 是长度 N 的时间列；is_weekend 是已定义函数。</p></div><div class="state"><strong>执行后</strong><p>原表新增或覆盖 TX_DURING_WEEKEND；正常情况下行数仍为 N。</p></div></div><h3>原代码 · 保持原样</h3><pre class="source"><span class="sr-only">原始代码，行号仅供定位。</span><span class="code-line"><span class="line-no">001</span><code>%time transactions_df[&#x27;TX_DURING_WEEKEND&#x27;]=transactions_df.TX_DATETIME.apply(is_weekend)</code></span></pre><div class="walkthrough"><h3>顺着代码看数据怎样变化</h3><p>由内向外读：<code>transactions_df.TX_DATETIME</code> 取出一列 Series；<code>.apply(is_weekend)</code> 把每个时间逐个交给函数；右侧生成与这些行对应的 0/1 Series；左侧方括号指定写入目标列。</p>
+<p>人工三行是周五、周六、周日，右侧结果就是 <code>[0,1,1]</code>。左边每一行原来的金额、客户编号仍在，新列把结果贴回相应行。<code>apply(is_weekend)</code> 传的是函数对象；写成 <code>apply(is_weekend())</code> 会先无参数调用函数，不符合这里需要的用法。</p></div><h3>一行一行读 · 可展开符号解释</h3><div class="line-table-wrap"><table class="line-table"><thead><tr><th>原始代码 · 逐行定位</th><th>动作与状态变化</th></tr></thead><tbody><tr id="cell-11-line-1"><td class="codecell"><a class="row-label" href="#cell-11-line-1">第 1 行</a><pre><code>%time transactions_df[&#x27;TX_DURING_WEEKEND&#x27;]=transactions_df.TX_DATETIME.apply(is_weekend)</code></pre></td><td><p class="scope">处于单元格顶层；真正执行本cell并到达此语句时才发生，静态精读本身不执行代码</p><p>IPython 的 %time 会执行后面的语句并记录耗时；计时结果取决于运行环境。 先计算右侧：将给定函数应用到指定对象的元素、行列或分组；准确粒度由接收对象和 axis 决定。传入：位置参数1是 <code>is_weekend</code>。</p><p>再把结果写到 <code>transactions_df['TX_DURING_WEEKEND']</code> 指定的位置或列；若是DataFrame列赋值，需要检查行数、索引对齐和是否覆盖已有列。</p><ul>
+<li>求值 <code>transactions_df.TX_DATETIME.apply(is_weekend)</code>：将给定函数应用到指定对象的元素、行列或分组；准确粒度由接收对象和 axis 决定。传入：位置参数1是 <code>is_weekend</code></li>
+</ul><ul>
+<li>调用 <code>transactions_df.TX_DATETIME.apply</code> 时的位置参数1：<code>is_weekend</code>；先求出该表达式再传入</li>
+</ul><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li><code>=</code> 在赋值位置把右侧结果交给左侧；在调用的 <code>参数名=值</code> 中则指定参数，不是在比较。</li>
+<li>点号从左侧对象或模块中取属性/方法；后接 <code>(...)</code> 才是在调用可调用成员。</li>
+<li>方括号可能创建列表，也可能是已有对象的索引/切片。<code>表[列名]</code>、<code>表[条件]</code> 与 <code>[值1,值2]</code> 的用途不同。</li>
+<li>圆括号在可调用表达式后可表示调用，也可用于运算分组、元组或类的基类声明；应结合当前语句。</li>
+<li><code>TX_DATETIME</code>：交易发生的日期时间</li>
+<li><code>transactions_df</code>：交易明细 DataFrame，每行通常对应一笔交易</li>
+</ul></details></td></tr></tbody></table></div><details class="historical"><summary>原书保存的历史输出 · 本次未运行</summary><p class="muted">以下内容原本就在 Notebook 文件中；其中的数字、图、警告与耗时不代表你当前电脑的运行结果。</p><pre class="historic-text">CPU times: user 7.54 s, sys: 247 ms, total: 7.79 s
+Wall time: 7.94 s
+</pre></details><div class="cell-nav"><a href="#cell-9">← 上一格代码</a><a href="#cell-13">下一格代码 →</a></div></article><details class="original" id="original-12"><summary>原单元格 12 · 原书说明</summary><div class="original-content"><p>We follow the same logic to implement the <code>TX_DURING_NIGHT</code> feature. First, a function <code>is_night</code> that takes as input a Panda timestamp, and returns 1 if the time is during the night, or 0 otherwise. The timestamp object conveniently provides the hour property to help in computing this value.</p></div></details><article class="cell" id="cell-13" data-cell="13"><div class="tag">原单元格 13 · 8 行 · 专项补注 + 逐行语法</div><h2 class="cell-title">is_night</h2><p><strong>这格解决什么：</strong> 定义夜间交易标记。</p><div class="states"><div class="state"><strong>执行前</strong><p>输入是单个日期时间对象。</p></div><div class="state"><strong>执行后</strong><p>登记 is_night；实际调用返回 0 或 1。</p></div></div><h3>原代码 · 保持原样</h3><pre class="source"><span class="sr-only">原始代码，行号仅供定位。</span><span class="code-line"><span class="line-no">001</span><code>def is_night(tx_datetime):</code></span><span class="code-line"><span class="line-no">002</span><code>    </code></span><span class="code-line"><span class="line-no">003</span><code>    # Get the hour of the transaction</code></span><span class="code-line"><span class="line-no">004</span><code>    tx_hour = tx_datetime.hour</code></span><span class="code-line"><span class="line-no">005</span><code>    # Binary value: 1 if hour less than 6, and 0 otherwise</code></span><span class="code-line"><span class="line-no">006</span><code>    is_night = tx_hour&lt;=6</code></span><span class="code-line"><span class="line-no">007</span><code>    </code></span><span class="code-line"><span class="line-no">008</span><code>    return int(is_night)</code></span></pre><div class="walkthrough"><h3>顺着代码看数据怎样变化</h3><p><code>.hour</code> 是属性，取整数小时，不带调用圆括号。人工例子：05:30 的小时是 5，06:59 的小时是 6，07:00 的小时是 7。按原代码 <code>tx_hour&lt;=6</code>，前两笔都得到 1，最后一笔得到 0。</p>
+<p>这里应以实际比较条件为准：注释说 less than 6，但代码使用小于或等于 6，因此覆盖了 06:00 到 06:59。不要将这条笔记本规则背成普遍的银行夜间业务定义；它只是作者为此示例选定的特征口径。先知道代码到底做了什么，再决定自己的项目要采用哪一个时间边界。</p></div><div class="notice"><strong>需要辨清的地方</strong><ul>
+<li>原注释与 &lt;=6 的边界不完全一致。</li>
+</ul></div><h3>一行一行读 · 可展开符号解释</h3><div class="line-table-wrap"><table class="line-table"><thead><tr><th>原始代码 · 逐行定位</th><th>动作与状态变化</th></tr></thead><tbody><tr id="cell-13-line-1"><td class="codecell"><a class="row-label" href="#cell-13-line-1">第 1 行</a><pre><code>def is_night(tx_datetime):</code></pre></td><td><p class="scope">此处是函数 `is_night` 的定义签名；默认值表达式在到达定义时求值，函数体等待以后调用</p><p>定义函数 <code>is_night(tx_datetime)</code>。冒号后缩进的代码是它的函数体。</p><p>到达此定义时求值默认参数等定义期表达式，建立函数对象并绑定名称；不会因此执行函数体。函数体说明仅在以后调用并走到相应路径时成立。</p><ul>
+<li>定义参数 <code>tx_datetime</code>，本签名未给默认值，调用者需按参数规则提供</li>
+</ul><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li>def 后的外层圆括号列出定义参数，不是调用；其中默认表达式若含另一个函数调用，它仍在定义时求值。</li>
+<li>冒号在语句末尾引出缩进块，在方括号内可表示切片，在字典内分隔键和值。</li>
+</ul></details></td></tr><tr id="cell-13-line-3"><td class="codecell"><a class="row-label" href="#cell-13-line-3">第 3 行</a><pre><code>    # Get the hour of the transaction</code></pre></td><td><p class="scope">本行是注释，不执行。所在上下文：此处是函数 `is_night` 的定义签名；默认值表达式在到达定义时求值，函数体等待以后调用</p><p>原作者的说明性注释：Get the hour of the transaction</p><p>该行不执行赋值、计算或训练。注释与实际实现不一致时，需按代码核对。</p><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li>本行 <code>#</code> 注释供人阅读，不参与运算；字符串内部的 # 不是注释标记。</li>
+<li>行首缩进说明它处于某个函数、循环、分支或括号续行中；不要仅看视觉对齐就判断执行次数。</li>
+</ul></details></td></tr><tr id="cell-13-line-4"><td class="codecell"><a class="row-label" href="#cell-13-line-4">第 4 行</a><pre><code>    tx_hour = tx_datetime.hour</code></pre></td><td><p class="scope">仅在调用 `is_night` 并执行到本行时发生；仅执行 def 不执行这段函数体</p><p>先计算右侧：访问 <code>tx_datetime</code> 的 <code>hour</code>，取得时间对象的小时部分。</p><p>把结果绑定到 <code>tx_hour</code>。名称原来的引用被替换；若右侧只是另一个对象变量，这通常是共享引用，不是自动复制。</p><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li><code>=</code> 在赋值位置把右侧结果交给左侧；在调用的 <code>参数名=值</code> 中则指定参数，不是在比较。</li>
+<li>点号从左侧对象或模块中取属性/方法；后接 <code>(...)</code> 才是在调用可调用成员。</li>
+<li>行首缩进说明它处于某个函数、循环、分支或括号续行中；不要仅看视觉对齐就判断执行次数。</li>
+</ul></details></td></tr><tr id="cell-13-line-5"><td class="codecell"><a class="row-label" href="#cell-13-line-5">第 5 行</a><pre><code>    # Binary value: 1 if hour less than 6, and 0 otherwise</code></pre></td><td><p class="scope">本行是注释，不执行。所在上下文：仅在调用 `is_night` 并执行到本行时发生；仅执行 def 不执行这段函数体</p><p>原作者的说明性注释：Binary value: 1 if hour less than 6, and 0 otherwise</p><p>该行不执行赋值、计算或训练。注释与实际实现不一致时，需按代码核对。</p><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li>本行 <code>#</code> 注释供人阅读，不参与运算；字符串内部的 # 不是注释标记。</li>
+<li>行首缩进说明它处于某个函数、循环、分支或括号续行中；不要仅看视觉对齐就判断执行次数。</li>
+</ul></details></td></tr><tr id="cell-13-line-6"><td class="codecell"><a class="row-label" href="#cell-13-line-6">第 6 行</a><pre><code>    is_night = tx_hour&lt;=6</code></pre></td><td><p class="scope">仅在调用 `is_night` 并执行到本行时发生；仅执行 def 不执行这段函数体</p><p>先计算右侧：判断<code>tx_hour</code> 是否小于或等于 <code>6</code>；标量比较通常给一个布尔值，数组或Series比较通常逐项给布尔值。</p><p>把结果绑定到 <code>is_night</code>。名称原来的引用被替换；若右侧只是另一个对象变量，这通常是共享引用，不是自动复制。</p><ul>
+<li>求值 <code>tx_hour &lt;= 6</code>：判断<code>tx_hour</code> 是否小于或等于 <code>6</code>；标量比较通常给一个布尔值，数组或Series比较通常逐项给布尔值</li>
+</ul><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li><code>=</code> 在赋值位置把右侧结果交给左侧；在调用的 <code>参数名=值</code> 中则指定参数，不是在比较。</li>
+<li>比较符生成判断结果；<code>==</code> 比较值是否相等，<code>=</code> 用于赋值或具名参数。</li>
+<li>行首缩进说明它处于某个函数、循环、分支或括号续行中；不要仅看视觉对齐就判断执行次数。</li>
+</ul></details></td></tr><tr id="cell-13-line-8"><td class="codecell"><a class="row-label" href="#cell-13-line-8">第 8 行</a><pre><code>    return int(is_night)</code></pre></td><td><p class="scope">仅在调用 `is_night` 并执行到本行时发生；仅执行 def 不执行这段函数体</p><p>计算要返回的内容：把输入转换为整数；浮点数转换时向零截去小数部分，不是取最接近的整数。传入：位置参数1是 <code>is_night</code>。</p><p>立即结束本次函数调用，把这个结果交回调用处；这次函数调用中后面的语句不再执行。返回表不等于自动写入磁盘。</p><ul>
+<li>求值 <code>int(is_night)</code>：把输入转换为整数；浮点数转换时向零截去小数部分，不是取最接近的整数。传入：位置参数1是 <code>is_night</code></li>
+</ul><ul>
+<li>调用 <code>int</code> 时的位置参数1：<code>is_night</code>；先求出该表达式再传入</li>
+</ul><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li>圆括号在可调用表达式后可表示调用，也可用于运算分组、元组或类的基类声明；应结合当前语句。</li>
+<li>行首缩进说明它处于某个函数、循环、分支或括号续行中；不要仅看视觉对齐就判断执行次数。</li>
+</ul></details></td></tr></tbody></table></div><details class="historical"><summary>原书保存的历史输出 · 本次未运行</summary><p class="muted">以下内容原本就在 Notebook 文件中；其中的数字、图、警告与耗时不代表你当前电脑的运行结果。</p><p class="muted">原文件没有为本格保存输出。这里不填造运行结果。</p></details><div class="cell-nav"><a href="#cell-11">← 上一格代码</a><a href="#cell-14">下一格代码 →</a></div></article><article class="cell" id="cell-14" data-cell="14"><div class="tag">原单元格 14 · 1 行 · 专项补注 + 逐行语法</div><h2 class="cell-title">%time transactions_df[&#x27;TX_DURING_NIGHT&#x27;]=transactions_df.TX_DATETIME.apply(i…</h2><p><strong>这格解决什么：</strong> 给每笔交易写入夜间标记。</p><div class="states"><div class="state"><strong>执行前</strong><p>存在 TX_DATETIME 和 is_night。</p></div><div class="state"><strong>执行后</strong><p>新增 TX_DURING_NIGHT，行数不因这次赋值改变。</p></div></div><h3>原代码 · 保持原样</h3><pre class="source"><span class="sr-only">原始代码，行号仅供定位。</span><span class="code-line"><span class="line-no">001</span><code>%time transactions_df[&#x27;TX_DURING_NIGHT&#x27;]=transactions_df.TX_DATETIME.apply(is_night)</code></span></pre><div class="walkthrough"><h3>顺着代码看数据怎样变化</h3><p>执行路线与周末标记相同，但判断依据换成小时。人工三行时间 00:10、06:59、16:20，结果分别为 1、1、0。<code>.apply</code> 没有把整张表一次传给 <code>is_night</code>，这里接收对象是一列，所以函数看到的是一个个时间值。</p>
+<p>先看等号右侧的结果，再看左侧列名，能避免误把 <code>TX_DURING_NIGHT</code> 当成函数参数。计时输出仅描述这次环境中的耗时，不能直接用原书保存的秒数预测你的电脑。</p></div><h3>一行一行读 · 可展开符号解释</h3><div class="line-table-wrap"><table class="line-table"><thead><tr><th>原始代码 · 逐行定位</th><th>动作与状态变化</th></tr></thead><tbody><tr id="cell-14-line-1"><td class="codecell"><a class="row-label" href="#cell-14-line-1">第 1 行</a><pre><code>%time transactions_df[&#x27;TX_DURING_NIGHT&#x27;]=transactions_df.TX_DATETIME.apply(is_night)</code></pre></td><td><p class="scope">处于单元格顶层；真正执行本cell并到达此语句时才发生，静态精读本身不执行代码</p><p>IPython 的 %time 会执行后面的语句并记录耗时；计时结果取决于运行环境。 先计算右侧：将给定函数应用到指定对象的元素、行列或分组；准确粒度由接收对象和 axis 决定。传入：位置参数1是 <code>is_night</code>。</p><p>再把结果写到 <code>transactions_df['TX_DURING_NIGHT']</code> 指定的位置或列；若是DataFrame列赋值，需要检查行数、索引对齐和是否覆盖已有列。</p><ul>
+<li>求值 <code>transactions_df.TX_DATETIME.apply(is_night)</code>：将给定函数应用到指定对象的元素、行列或分组；准确粒度由接收对象和 axis 决定。传入：位置参数1是 <code>is_night</code></li>
+</ul><ul>
+<li>调用 <code>transactions_df.TX_DATETIME.apply</code> 时的位置参数1：<code>is_night</code>；先求出该表达式再传入</li>
+</ul><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li><code>=</code> 在赋值位置把右侧结果交给左侧；在调用的 <code>参数名=值</code> 中则指定参数，不是在比较。</li>
+<li>点号从左侧对象或模块中取属性/方法；后接 <code>(...)</code> 才是在调用可调用成员。</li>
+<li>方括号可能创建列表，也可能是已有对象的索引/切片。<code>表[列名]</code>、<code>表[条件]</code> 与 <code>[值1,值2]</code> 的用途不同。</li>
+<li>圆括号在可调用表达式后可表示调用，也可用于运算分组、元组或类的基类声明；应结合当前语句。</li>
+<li><code>TX_DATETIME</code>：交易发生的日期时间</li>
+<li><code>transactions_df</code>：交易明细 DataFrame，每行通常对应一笔交易</li>
+</ul></details></td></tr></tbody></table></div><details class="historical"><summary>原书保存的历史输出 · 本次未运行</summary><p class="muted">以下内容原本就在 Notebook 文件中；其中的数字、图、警告与耗时不代表你当前电脑的运行结果。</p><pre class="historic-text">CPU times: user 7.09 s, sys: 221 ms, total: 7.31 s
+Wall time: 7.47 s
+</pre></details><div class="cell-nav"><a href="#cell-13">← 上一格代码</a><a href="#cell-16">下一格代码 →</a></div></article><details class="original" id="original-15"><summary>原单元格 15 · 原书说明</summary><div class="original-content"><p>Let us check that these features where correctly computed.</p></div></details><article class="cell" id="cell-16" data-cell="16"><div class="tag">原单元格 16 · 1 行 · 专项补注 + 逐行语法</div><h2 class="cell-title">transactions_df[transactions_df.TX_TIME_DAYS&gt;=30]</h2><p><strong>这格解决什么：</strong> 显示第 30 天及以后的交易子集。</p><div class="states"><div class="state"><strong>执行前</strong><p>TX_TIME_DAYS 是相对起点的天编号。</p></div><div class="state"><strong>执行后</strong><p>表达式产生筛选结果供展示；本格没有重新赋给 transactions_df。</p></div></div><h3>原代码 · 保持原样</h3><pre class="source"><span class="sr-only">原始代码，行号仅供定位。</span><span class="code-line"><span class="line-no">001</span><code>transactions_df[transactions_df.TX_TIME_DAYS&gt;=30]</code></span></pre><div class="walkthrough"><h3>顺着代码看数据怎样变化</h3><p><code>transactions_df.TX_TIME_DAYS&gt;=30</code> 先得到布尔条件。人工天编号 <code>[0,29,30,31]</code> 对应 <code>[False,False,True,True]</code>；外层 <code>transactions_df[条件]</code> 取出后两行。这个子集是表达式的结果，不意味着原变量已经只剩两行。</p>
+<p>这里的 30 是日编号阈值，不是 30 行。若一天有很多笔交易，它们会一起按各自的天编号判断。是否保留这个筛选结果用于后续训练，要看后面是否有赋值或在其他函数中重新筛选，不能仅凭这一格展示推断。</p></div><h3>一行一行读 · 可展开符号解释</h3><div class="line-table-wrap"><table class="line-table"><thead><tr><th>原始代码 · 逐行定位</th><th>动作与状态变化</th></tr></thead><tbody><tr id="cell-16-line-1"><td class="codecell"><a class="row-label" href="#cell-16-line-1">第 1 行</a><pre><code>transactions_df[transactions_df.TX_TIME_DAYS&gt;=30]</code></pre></td><td><p class="scope">处于单元格顶层；真正执行本cell并到达此语句时才发生，静态精读本身不执行代码</p><p>从 <code>transactions_df</code> 中按 <code>transactions_df.TX_TIME_DAYS &gt;= 30</code> 取值；字符串常指列或字典键，布尔序列常用于筛选，整数的含义取决于对象的索引规则。</p><p>本行没有用等号把返回值另存到名称。若是对象方法可能有副作用；若是单元格最后一个表达式，Jupyter通常会显示其返回结果。</p><ul>
+<li>求值 <code>transactions_df.TX_TIME_DAYS &gt;= 30</code>：判断<code>transactions_df.TX_TIME_DAYS</code> 是否大于或等于 <code>30</code>；标量比较通常给一个布尔值，数组或Series比较通常逐项给布尔值</li>
+<li>求值 <code>transactions_df[transactions_df.TX_TIME_DAYS &gt;= 30]</code>：从 <code>transactions_df</code> 中按 <code>transactions_df.TX_TIME_DAYS &gt;= 30</code> 取值；字符串常指列或字典键，布尔序列常用于筛选，整数的含义取决于对象的索引规则</li>
+</ul><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li>比较符生成判断结果；<code>==</code> 比较值是否相等，<code>=</code> 用于赋值或具名参数。</li>
+<li>点号从左侧对象或模块中取属性/方法；后接 <code>(...)</code> 才是在调用可调用成员。</li>
+<li>方括号可能创建列表，也可能是已有对象的索引/切片。<code>表[列名]</code>、<code>表[条件]</code> 与 <code>[值1,值2]</code> 的用途不同。</li>
+<li><code>TX_TIME_DAYS</code>：相对模拟起点的整天编号</li>
+<li><code>transactions_df</code>：交易明细 DataFrame，每行通常对应一笔交易</li>
+</ul></details></td></tr></tbody></table></div><details class="historical"><summary>原书保存的历史输出 · 本次未运行</summary><p class="muted">以下内容原本就在 Notebook 文件中；其中的数字、图、警告与耗时不代表你当前电脑的运行结果。</p><div class="historic-table"><div>
+
+<table border="1" class="dataframe">
+<thead>
+<tr>
+<th></th>
+<th>TRANSACTION_ID</th>
+<th>TX_DATETIME</th>
+<th>CUSTOMER_ID</th>
+<th>TERMINAL_ID</th>
+<th>TX_AMOUNT</th>
+<th>TX_TIME_SECONDS</th>
+<th>TX_TIME_DAYS</th>
+<th>TX_FRAUD</th>
+<th>TX_FRAUD_SCENARIO</th>
+<th>TX_DURING_WEEKEND</th>
+<th>TX_DURING_NIGHT</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<th>288062</th>
+<td>288062</td>
+<td>2018-05-01 00:01:21</td>
+<td>3546</td>
+<td>2944</td>
+<td>18.71</td>
+<td>2592081</td>
+<td>30</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>1</td>
+</tr>
+<tr>
+<th>288063</th>
+<td>288063</td>
+<td>2018-05-01 00:01:48</td>
+<td>206</td>
+<td>3521</td>
+<td>18.60</td>
+<td>2592108</td>
+<td>30</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>1</td>
+</tr>
+<tr>
+<th>288064</th>
+<td>288064</td>
+<td>2018-05-01 00:02:22</td>
+<td>2610</td>
+<td>4470</td>
+<td>66.67</td>
+<td>2592142</td>
+<td>30</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>1</td>
+</tr>
+<tr>
+<th>288065</th>
+<td>288065</td>
+<td>2018-05-01 00:03:15</td>
+<td>4578</td>
+<td>1520</td>
+<td>79.41</td>
+<td>2592195</td>
+<td>30</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>1</td>
+</tr>
+<tr>
+<th>288066</th>
+<td>288066</td>
+<td>2018-05-01 00:03:51</td>
+<td>1246</td>
+<td>7809</td>
+<td>52.08</td>
+<td>2592231</td>
+<td>30</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>1</td>
+</tr>
+<tr>
+<th>...</th>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+</tr>
+<tr>
+<th>1754150</th>
+<td>1754150</td>
+<td>2018-09-30 23:56:36</td>
+<td>161</td>
+<td>655</td>
+<td>54.24</td>
+<td>15810996</td>
+<td>182</td>
+<td>0</td>
+<td>0</td>
+<td>1</td>
+<td>0</td>
+</tr>
+<tr>
+<th>1754151</th>
+<td>1754151</td>
+<td>2018-09-30 23:57:38</td>
+<td>4342</td>
+<td>6181</td>
+<td>1.23</td>
+<td>15811058</td>
+<td>182</td>
+<td>0</td>
+<td>0</td>
+<td>1</td>
+<td>0</td>
+</tr>
+<tr>
+<th>1754152</th>
+<td>1754152</td>
+<td>2018-09-30 23:58:21</td>
+<td>618</td>
+<td>1502</td>
+<td>6.62</td>
+<td>15811101</td>
+<td>182</td>
+<td>0</td>
+<td>0</td>
+<td>1</td>
+<td>0</td>
+</tr>
+<tr>
+<th>1754153</th>
+<td>1754153</td>
+<td>2018-09-30 23:59:52</td>
+<td>4056</td>
+<td>3067</td>
+<td>55.40</td>
+<td>15811192</td>
+<td>182</td>
+<td>0</td>
+<td>0</td>
+<td>1</td>
+<td>0</td>
+</tr>
+<tr>
+<th>1754154</th>
+<td>1754154</td>
+<td>2018-09-30 23:59:57</td>
+<td>3542</td>
+<td>9849</td>
+<td>23.59</td>
+<td>15811197</td>
+<td>182</td>
+<td>0</td>
+<td>0</td>
+<td>1</td>
+<td>0</td>
+</tr>
+</tbody>
+</table>
+<p>1466093 rows × 11 columns</p>
+</div></div></details><div class="cell-nav"><a href="#cell-14">← 上一格代码</a><a href="#cell-19">下一格代码 →</a></div></article><details class="original" id="original-17"><summary>原单元格 17 · 原书说明</summary><div class="original-content"><p>The 2018-05-01 was a Monday, and the 2018-09-30 a Sunday. These dates are correctly flagged as weekday, and weekend, respectively. The day and night feature is also correctly set for the first transactions, that happen closely after 0 pm, and the last transactions that happen closely before 0 pm. </p></div></details><details class="original" id="original-18"><summary>原单元格 18 · Customer ID transformations</summary><div class="original-content"><h2>Customer ID transformations</h2>
+<p>Let us now proceed with customer ID transformations. We will take inspiration from the RFM (Recency, Frequency, Monetary value) framework proposed in {cite}<code>VANVLASSELAER201538</code>, and compute two of these features over three time windows. The first feature will be the number of transactions that occur within a time window (Frequency). The second will be the average amount spent in these transactions (Monetary value). The time windows will be set to one, seven, and thirty days. This will generate six new features. Note that these time windows could later be optimized along with the models using a model selection procedure (<a href="10-ModelSelection.html#original-1">Chapter 5</a>). </p>
+<p>Let us implement these transformations by writing a <code>get_customer_spending_behaviour_features</code> function. The function takes as inputs the set of transactions for a customer and a set of window sizes. It returns a DataFrame with the six new features. Our implementation relies on the Panda <code>rolling</code> function, which makes easy the computation of aggregates over a time window.</p></div></details><article class="cell" id="cell-19" data-cell="19"><div class="tag">原单元格 19 · 28 行 · 专项补注 + 逐行语法</div><h2 class="cell-title">get_customer_spending_behaviour_features</h2><p><strong>这格解决什么：</strong> 定义一个客户的消费次数与平均金额滚动特征。</p><div class="states"><div class="state"><strong>执行前</strong><p>输入是一位客户的交易表，至少有 TX_DATETIME、TX_AMOUNT 和 TRANSACTION_ID。</p></div><div class="state"><strong>执行后</strong><p>定义阶段不计算；调用时返回同一批交易加六列：1、7、30 天的笔数与平均金额。</p></div></div><h3>原代码 · 保持原样</h3><pre class="source"><span class="sr-only">原始代码，行号仅供定位。</span><span class="code-line"><span class="line-no">001</span><code>def get_customer_spending_behaviour_features(customer_transactions, windows_size_in_days=[1,7,30]):</code></span><span class="code-line"><span class="line-no">002</span><code>    </code></span><span class="code-line"><span class="line-no">003</span><code>    # Let us first order transactions chronologically</code></span><span class="code-line"><span class="line-no">004</span><code>    customer_transactions=customer_transactions.sort_values(&#x27;TX_DATETIME&#x27;)</code></span><span class="code-line"><span class="line-no">005</span><code>    </code></span><span class="code-line"><span class="line-no">006</span><code>    # The transaction date and time is set as the index, which will allow the use of the rolling function </code></span><span class="code-line"><span class="line-no">007</span><code>    customer_transactions.index=customer_transactions.TX_DATETIME</code></span><span class="code-line"><span class="line-no">008</span><code>    </code></span><span class="code-line"><span class="line-no">009</span><code>    # For each window size</code></span><span class="code-line"><span class="line-no">010</span><code>    for window_size in windows_size_in_days:</code></span><span class="code-line"><span class="line-no">011</span><code>        </code></span><span class="code-line"><span class="line-no">012</span><code>        # Compute the sum of the transaction amounts and the number of transactions for the given window size</code></span><span class="code-line"><span class="line-no">013</span><code>        SUM_AMOUNT_TX_WINDOW=customer_transactions[&#x27;TX_AMOUNT&#x27;].rolling(str(window_size)+&#x27;d&#x27;).sum()</code></span><span class="code-line"><span class="line-no">014</span><code>        NB_TX_WINDOW=customer_transactions[&#x27;TX_AMOUNT&#x27;].rolling(str(window_size)+&#x27;d&#x27;).count()</code></span><span class="code-line"><span class="line-no">015</span><code>    </code></span><span class="code-line"><span class="line-no">016</span><code>        # Compute the average transaction amount for the given window size</code></span><span class="code-line"><span class="line-no">017</span><code>        # NB_TX_WINDOW is always &gt;0 since current transaction is always included</code></span><span class="code-line"><span class="line-no">018</span><code>        AVG_AMOUNT_TX_WINDOW=SUM_AMOUNT_TX_WINDOW/NB_TX_WINDOW</code></span><span class="code-line"><span class="line-no">019</span><code>    </code></span><span class="code-line"><span class="line-no">020</span><code>        # Save feature values</code></span><span class="code-line"><span class="line-no">021</span><code>        customer_transactions[&#x27;CUSTOMER_ID_NB_TX_&#x27;+str(window_size)+&#x27;DAY_WINDOW&#x27;]=list(NB_TX_WINDOW)</code></span><span class="code-line"><span class="line-no">022</span><code>        customer_transactions[&#x27;CUSTOMER_ID_AVG_AMOUNT_&#x27;+str(window_size)+&#x27;DAY_WINDOW&#x27;]=list(AVG_AMOUNT_TX_WINDOW)</code></span><span class="code-line"><span class="line-no">023</span><code>    </code></span><span class="code-line"><span class="line-no">024</span><code>    # Reindex according to transaction IDs</code></span><span class="code-line"><span class="line-no">025</span><code>    customer_transactions.index=customer_transactions.TRANSACTION_ID</code></span><span class="code-line"><span class="line-no">026</span><code>        </code></span><span class="code-line"><span class="line-no">027</span><code>    # And return the dataframe with the new features</code></span><span class="code-line"><span class="line-no">028</span><code>    return customer_transactions</code></span></pre><div class="walkthrough"><h3>顺着代码看数据怎样变化</h3><p>先按时间排序，然后把行索引临时设成 <code>TX_DATETIME</code>。这样 <code>.rolling('1d')</code> 的窗口是一天时间长度，不是一行；<code>str(window_size)+'d'</code> 把整数 1 变成字符串 <code>'1d'</code>。</p>
+<p>人工小表：客户 A 在 4 月 1 日 10:00 消费 20，4 月 1 日 18:00 消费 40，4 月 2 日 12:00 消费 100。看第三行的一天窗口 <code>(4月1日12:00, 4月2日12:00]</code>，只包含 40 和 100，<code>sum=140</code>、<code>count=2</code>、<code>avg=70</code>。第三行七天窗口包含三笔，<code>sum=160</code>、<code>count=3</code>、<code>avg=160/3</code>。这些数是人为设计的，用来显示窗口边界。</p>
+<p>循环第一次令 <code>window_size=1</code>，生成一对列；第二次为 7，第三次为 30。<code>NB_TX_WINDOW</code> 是中间 Series，<code>AVG_AMOUNT_TX_WINDOW=SUM_AMOUNT_TX_WINDOW/NB_TX_WINDOW</code> 按相同行标签对应相除。随后 <code>list(...)</code> 取出顺序值，赋回等长的表列；这里转换为列表意味着按位置写入，不能再依靠原 Series 索引自动纠正乱序。</p>
+<p>末尾把索引改成 <code>TRANSACTION_ID</code>，然后 <code>return customer_transactions</code> 返回整张加工后的表。赋值给 <code>.index</code> 与删除对应数据列不同，交易 ID 列仍可留在表里。由于默认时间窗口包含当前交易，第三行的 100 已经参加该行平均值；这适合交易发生时金额已经可知的评分场景，但不能把它描述为完全排除本笔的纯历史均值。</p>
+<p>函数默认参数 <code>[1,7,30]</code> 在定义时创建，原函数只遍历它而没有追加元素；若将来改写为原地修改这个列表，应另考虑可变默认值问题。</p></div><div class="notice"><strong>需要辨清的地方</strong><ul>
+<li>先确保按客户分别调用，不能把不同客户混到同一窗口。</li>
+<li>时间重复、缺失金额和索引对齐需要额外检查；此例的简化数据不能代表所有生产输入。</li>
+</ul></div><h3>一行一行读 · 可展开符号解释</h3><div class="line-table-wrap"><table class="line-table"><thead><tr><th>原始代码 · 逐行定位</th><th>动作与状态变化</th></tr></thead><tbody><tr id="cell-19-line-1"><td class="codecell"><a class="row-label" href="#cell-19-line-1">第 1 行</a><pre><code>def get_customer_spending_behaviour_features(customer_transactions, windows_size_in_days=[1,7,30]):</code></pre></td><td><p class="scope">此处是函数 `get_customer_spending_behaviour_features` 的定义签名；默认值表达式在到达定义时求值，函数体等待以后调用</p><p>定义函数 <code>get_customer_spending_behaviour_features(customer_transactions, windows_size_in_days=[1, 7, 30])</code>。冒号后缩进的代码是它的函数体。</p><p>到达此定义时求值默认参数等定义期表达式，建立函数对象并绑定名称；不会因此执行函数体。函数体说明仅在以后调用并走到相应路径时成立。</p><ul>
+<li>求值 <code>[1, 7, 30]</code>：含 3 项的列表：常量 <code>1</code>；常量 <code>7</code>；常量 <code>30</code></li>
+</ul><ul>
+<li>定义参数 <code>customer_transactions</code>，本签名未给默认值，调用者需按参数规则提供</li>
+<li>定义参数 <code>windows_size_in_days</code> 的默认表达式 <code>[1, 7, 30]</code>；它在定义时求值一次，调用未提供该参数时才采用这个默认对象</li>
+</ul><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li>函数定义签名中的 <code>参数名=表达式</code> 指定默认值；默认表达式在定义时求值，不能当成一次实际传参或函数体赋值。</li>
+<li>方括号可能创建列表，也可能是已有对象的索引/切片。<code>表[列名]</code>、<code>表[条件]</code> 与 <code>[值1,值2]</code> 的用途不同。</li>
+<li>def 后的外层圆括号列出定义参数，不是调用；其中默认表达式若含另一个函数调用，它仍在定义时求值。</li>
+<li>冒号在语句末尾引出缩进块，在方括号内可表示切片，在字典内分隔键和值。</li>
+<li>逗号分隔参数、元素或解包目标，项目的先后顺序可能决定字段或维度对应。</li>
+<li><code>windows_size_in_days</code>：需要分别计算的多个窗口天数</li>
+</ul></details></td></tr><tr id="cell-19-line-3"><td class="codecell"><a class="row-label" href="#cell-19-line-3">第 3 行</a><pre><code>    # Let us first order transactions chronologically</code></pre></td><td><p class="scope">本行是注释，不执行。所在上下文：此处是函数 `get_customer_spending_behaviour_features` 的定义签名；默认值表达式在到达定义时求值，函数体等待以后调用</p><p>原作者的说明性注释：Let us first order transactions chronologically</p><p>该行不执行赋值、计算或训练。注释与实际实现不一致时，需按代码核对。</p><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li>本行 <code>#</code> 注释供人阅读，不参与运算；字符串内部的 # 不是注释标记。</li>
+<li>行首缩进说明它处于某个函数、循环、分支或括号续行中；不要仅看视觉对齐就判断执行次数。</li>
+</ul></details></td></tr><tr id="cell-19-line-4"><td class="codecell"><a class="row-label" href="#cell-19-line-4">第 4 行</a><pre><code>    customer_transactions=customer_transactions.sort_values(&#x27;TX_DATETIME&#x27;)</code></pre></td><td><p class="scope">仅在调用 `get_customer_spending_behaviour_features` 并执行到本行时发生；仅执行 def 不执行这段函数体</p><p>先计算右侧：按给定列排序；默认返回排序结果，只有明确 inplace 才原地修改。传入：位置参数1是 <code>'TX_DATETIME'</code>。</p><p>把结果绑定到 <code>customer_transactions</code>。名称原来的引用被替换；若右侧只是另一个对象变量，这通常是共享引用，不是自动复制。</p><ul>
+<li>求值 <code>customer_transactions.sort_values('TX_DATETIME')</code>：按给定列排序；默认返回排序结果，只有明确 inplace 才原地修改。传入：位置参数1是 <code>'TX_DATETIME'</code></li>
+</ul><ul>
+<li>调用 <code>customer_transactions.sort_values</code> 时的位置参数1：<code>'TX_DATETIME'</code>；先求出该表达式再传入</li>
+</ul><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li><code>=</code> 在赋值位置把右侧结果交给左侧；在调用的 <code>参数名=值</code> 中则指定参数，不是在比较。</li>
+<li>点号从左侧对象或模块中取属性/方法；后接 <code>(...)</code> 才是在调用可调用成员。</li>
+<li>圆括号在可调用表达式后可表示调用，也可用于运算分组、元组或类的基类声明；应结合当前语句。</li>
+<li>行首缩进说明它处于某个函数、循环、分支或括号续行中；不要仅看视觉对齐就判断执行次数。</li>
+</ul></details></td></tr><tr id="cell-19-line-6"><td class="codecell"><a class="row-label" href="#cell-19-line-6">第 6 行</a><pre><code>    # The transaction date and time is set as the index, which will allow the use of the rolling function </code></pre></td><td><p class="scope">本行是注释，不执行。所在上下文：仅在调用 `get_customer_spending_behaviour_features` 并执行到本行时发生；仅执行 def 不执行这段函数体</p><p>原作者的说明性注释：The transaction date and time is set as the index, which will allow the use of the rolling function</p><p>该行不执行赋值、计算或训练。注释与实际实现不一致时，需按代码核对。</p><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li>本行 <code>#</code> 注释供人阅读，不参与运算；字符串内部的 # 不是注释标记。</li>
+<li>行首缩进说明它处于某个函数、循环、分支或括号续行中；不要仅看视觉对齐就判断执行次数。</li>
+</ul></details></td></tr><tr id="cell-19-line-7"><td class="codecell"><a class="row-label" href="#cell-19-line-7">第 7 行</a><pre><code>    customer_transactions.index=customer_transactions.TX_DATETIME</code></pre></td><td><p class="scope">仅在调用 `get_customer_spending_behaviour_features` 并执行到本行时发生；仅执行 def 不执行这段函数体</p><p>先计算右侧：访问 <code>customer_transactions</code> 的 <code>TX_DATETIME</code> 属性或成员。</p><p>把结果保存到 <code>customer_transactions.index</code> 指定的对象属性；这会改变该对象的状态。</p><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li><code>=</code> 在赋值位置把右侧结果交给左侧；在调用的 <code>参数名=值</code> 中则指定参数，不是在比较。</li>
+<li>点号从左侧对象或模块中取属性/方法；后接 <code>(...)</code> 才是在调用可调用成员。</li>
+<li>行首缩进说明它处于某个函数、循环、分支或括号续行中；不要仅看视觉对齐就判断执行次数。</li>
+<li><code>TX_DATETIME</code>：交易发生的日期时间</li>
+</ul></details></td></tr><tr id="cell-19-line-9"><td class="codecell"><a class="row-label" href="#cell-19-line-9">第 9 行</a><pre><code>    # For each window size</code></pre></td><td><p class="scope">本行是注释，不执行。所在上下文：仅在调用 `get_customer_spending_behaviour_features` 并执行到本行时发生；仅执行 def 不执行这段函数体</p><p>原作者的说明性注释：For each window size</p><p>该行不执行赋值、计算或训练。注释与实际实现不一致时，需按代码核对。</p><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li>本行 <code>#</code> 注释供人阅读，不参与运算；字符串内部的 # 不是注释标记。</li>
+<li>行首缩进说明它处于某个函数、循环、分支或括号续行中；不要仅看视觉对齐就判断执行次数。</li>
+</ul></details></td></tr><tr id="cell-19-line-10"><td class="codecell"><a class="row-label" href="#cell-19-line-10">第 10 行</a><pre><code>    for window_size in windows_size_in_days:</code></pre></td><td><p class="scope">仅在调用 `get_customer_spending_behaviour_features` 并执行到本行时发生；仅执行 def 不执行这段函数体</p><p>遍历 <code>windows_size_in_days</code>，每次把取出的项交给 <code>window_size</code>。</p><p>对每项执行缩进体；循环变量通常被下一项覆盖，累计结果需另放列表、表格或计数器。空可迭代对象不会执行循环体。</p><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li>冒号在语句末尾引出缩进块，在方括号内可表示切片，在字典内分隔键和值。</li>
+<li>行首缩进说明它处于某个函数、循环、分支或括号续行中；不要仅看视觉对齐就判断执行次数。</li>
+<li><code>window_size</code>：本轮滚动窗口长度</li>
+<li><code>windows_size_in_days</code>：需要分别计算的多个窗口天数</li>
+</ul></details></td></tr><tr id="cell-19-line-12"><td class="codecell"><a class="row-label" href="#cell-19-line-12">第 12 行</a><pre><code>        # Compute the sum of the transaction amounts and the number of transactions for the given window size</code></pre></td><td><p class="scope">本行是注释，不执行。所在上下文：仅在调用 `get_customer_spending_behaviour_features` 并执行到本行时发生；仅执行 def 不执行这段函数体</p><p>原作者的说明性注释：Compute the sum of the transaction amounts and the number of transactions for the given window size</p><p>该行不执行赋值、计算或训练。注释与实际实现不一致时，需按代码核对。</p><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li>本行 <code>#</code> 注释供人阅读，不参与运算；字符串内部的 # 不是注释标记。</li>
+<li>行首缩进说明它处于某个函数、循环、分支或括号续行中；不要仅看视觉对齐就判断执行次数。</li>
+</ul></details></td></tr><tr id="cell-19-line-13"><td class="codecell"><a class="row-label" href="#cell-19-line-13">第 13 行</a><pre><code>        SUM_AMOUNT_TX_WINDOW=customer_transactions[&#x27;TX_AMOUNT&#x27;].rolling(str(window_size)+&#x27;d&#x27;).sum()</code></pre></td><td><p class="scope">仅在调用 `get_customer_spending_behaviour_features` 并执行到本行时发生；仅执行 def 不执行这段函数体；属于循环体，仅在本轮从 `windows_size_in_days` 取得一项赋给 `window_size`后走到本行时执行</p><p>先计算右侧：对指定数据或窗口求和；0/1标签求和可统计欺诈笔数。这里没有显式传入参数。</p><p>把结果绑定到 <code>SUM_AMOUNT_TX_WINDOW</code>。名称原来的引用被替换；若右侧只是另一个对象变量，这通常是共享引用，不是自动复制。</p><ul>
+<li>求值 <code>customer_transactions['TX_AMOUNT']</code>：从 <code>customer_transactions</code> 中按 <code>'TX_AMOUNT'</code> 取值；字符串常指列或字典键，布尔序列常用于筛选，整数的含义取决于对象的索引规则</li>
+<li>求值 <code>str(window_size)</code>：按 <code>str</code> 对输入进行构造或类型转换。传入：位置参数1是 <code>window_size</code></li>
+<li>求值 <code>str(window_size) + 'd'</code>：先计算 <code>str(window_size)</code> 与 <code>'d'</code>；数值的 + 是相加，列表或字符串的 + 是按顺序拼接，数组/Series则按各自对齐规则计算</li>
+<li>求值 <code>customer_transactions['TX_AMOUNT'].rolling(str(window_size) + 'd')</code>：建立滚动窗口视图，窗口按行数还是时间取决于参数；后面的 sum/count 等才计算值。传入：位置参数1是 <code>str(window_size) + 'd'</code></li>
+<li>求值 <code>customer_transactions['TX_AMOUNT'].rolling(str(window_size) + 'd').sum()</code>：对指定数据或窗口求和；0/1标签求和可统计欺诈笔数。这里没有显式传入参数</li>
+</ul><ul>
+<li>调用 <code>customer_transactions['TX_AMOUNT'].rolling</code> 时的位置参数1：<code>str(window_size) + 'd'</code>；先求出该表达式再传入</li>
+<li>调用 <code>str</code> 时的位置参数1：<code>window_size</code>；先求出该表达式再传入</li>
+</ul><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li><code>=</code> 在赋值位置把右侧结果交给左侧；在调用的 <code>参数名=值</code> 中则指定参数，不是在比较。</li>
+<li>点号从左侧对象或模块中取属性/方法；后接 <code>(...)</code> 才是在调用可调用成员。</li>
+<li>方括号可能创建列表，也可能是已有对象的索引/切片。<code>表[列名]</code>、<code>表[条件]</code> 与 <code>[值1,值2]</code> 的用途不同。</li>
+<li>圆括号在可调用表达式后可表示调用，也可用于运算分组、元组或类的基类声明；应结合当前语句。</li>
+<li>行首缩进说明它处于某个函数、循环、分支或括号续行中；不要仅看视觉对齐就判断执行次数。</li>
+<li><code>window_size</code>：本轮滚动窗口长度</li>
+</ul></details></td></tr><tr id="cell-19-line-14"><td class="codecell"><a class="row-label" href="#cell-19-line-14">第 14 行</a><pre><code>        NB_TX_WINDOW=customer_transactions[&#x27;TX_AMOUNT&#x27;].rolling(str(window_size)+&#x27;d&#x27;).count()</code></pre></td><td><p class="scope">仅在调用 `get_customer_spending_behaviour_features` 并执行到本行时发生；仅执行 def 不执行这段函数体；属于循环体，仅在本轮从 `windows_size_in_days` 取得一项赋给 `window_size`后走到本行时执行</p><p>先计算右侧：统计非缺失记录数量；不要自动等同包含缺失的所有行数。这里没有显式传入参数。</p><p>把结果绑定到 <code>NB_TX_WINDOW</code>。名称原来的引用被替换；若右侧只是另一个对象变量，这通常是共享引用，不是自动复制。</p><ul>
+<li>求值 <code>customer_transactions['TX_AMOUNT']</code>：从 <code>customer_transactions</code> 中按 <code>'TX_AMOUNT'</code> 取值；字符串常指列或字典键，布尔序列常用于筛选，整数的含义取决于对象的索引规则</li>
+<li>求值 <code>str(window_size)</code>：按 <code>str</code> 对输入进行构造或类型转换。传入：位置参数1是 <code>window_size</code></li>
+<li>求值 <code>str(window_size) + 'd'</code>：先计算 <code>str(window_size)</code> 与 <code>'d'</code>；数值的 + 是相加，列表或字符串的 + 是按顺序拼接，数组/Series则按各自对齐规则计算</li>
+<li>求值 <code>customer_transactions['TX_AMOUNT'].rolling(str(window_size) + 'd')</code>：建立滚动窗口视图，窗口按行数还是时间取决于参数；后面的 sum/count 等才计算值。传入：位置参数1是 <code>str(window_size) + 'd'</code></li>
+<li>求值 <code>customer_transactions['TX_AMOUNT'].rolling(str(window_size) + 'd').count()</code>：统计非缺失记录数量；不要自动等同包含缺失的所有行数。这里没有显式传入参数</li>
+</ul><ul>
+<li>调用 <code>customer_transactions['TX_AMOUNT'].rolling</code> 时的位置参数1：<code>str(window_size) + 'd'</code>；先求出该表达式再传入</li>
+<li>调用 <code>str</code> 时的位置参数1：<code>window_size</code>；先求出该表达式再传入</li>
+</ul><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li><code>=</code> 在赋值位置把右侧结果交给左侧；在调用的 <code>参数名=值</code> 中则指定参数，不是在比较。</li>
+<li>点号从左侧对象或模块中取属性/方法；后接 <code>(...)</code> 才是在调用可调用成员。</li>
+<li>方括号可能创建列表，也可能是已有对象的索引/切片。<code>表[列名]</code>、<code>表[条件]</code> 与 <code>[值1,值2]</code> 的用途不同。</li>
+<li>圆括号在可调用表达式后可表示调用，也可用于运算分组、元组或类的基类声明；应结合当前语句。</li>
+<li>行首缩进说明它处于某个函数、循环、分支或括号续行中；不要仅看视觉对齐就判断执行次数。</li>
+<li><code>window_size</code>：本轮滚动窗口长度</li>
+</ul></details></td></tr><tr id="cell-19-line-16"><td class="codecell"><a class="row-label" href="#cell-19-line-16">第 16 行</a><pre><code>        # Compute the average transaction amount for the given window size</code></pre></td><td><p class="scope">本行是注释，不执行。所在上下文：仅在调用 `get_customer_spending_behaviour_features` 并执行到本行时发生；仅执行 def 不执行这段函数体；属于循环体，仅在本轮从 `windows_size_in_days` 取得一项赋给 `window_size`后走到本行时执行</p><p>原作者的说明性注释：Compute the average transaction amount for the given window size</p><p>该行不执行赋值、计算或训练。注释与实际实现不一致时，需按代码核对。</p><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li>本行 <code>#</code> 注释供人阅读，不参与运算；字符串内部的 # 不是注释标记。</li>
+<li>行首缩进说明它处于某个函数、循环、分支或括号续行中；不要仅看视觉对齐就判断执行次数。</li>
+</ul></details></td></tr><tr id="cell-19-line-17"><td class="codecell"><a class="row-label" href="#cell-19-line-17">第 17 行</a><pre><code>        # NB_TX_WINDOW is always &gt;0 since current transaction is always included</code></pre></td><td><p class="scope">本行是注释，不执行。所在上下文：仅在调用 `get_customer_spending_behaviour_features` 并执行到本行时发生；仅执行 def 不执行这段函数体；属于循环体，仅在本轮从 `windows_size_in_days` 取得一项赋给 `window_size`后走到本行时执行</p><p>原作者的说明性注释：NB_TX_WINDOW is always &gt;0 since current transaction is always included</p><p>该行不执行赋值、计算或训练。注释与实际实现不一致时，需按代码核对。</p><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li>本行 <code>#</code> 注释供人阅读，不参与运算；字符串内部的 # 不是注释标记。</li>
+<li>行首缩进说明它处于某个函数、循环、分支或括号续行中；不要仅看视觉对齐就判断执行次数。</li>
+</ul></details></td></tr><tr id="cell-19-line-18"><td class="codecell"><a class="row-label" href="#cell-19-line-18">第 18 行</a><pre><code>        AVG_AMOUNT_TX_WINDOW=SUM_AMOUNT_TX_WINDOW/NB_TX_WINDOW</code></pre></td><td><p class="scope">仅在调用 `get_customer_spending_behaviour_features` 并执行到本行时发生；仅执行 def 不执行这段函数体；属于循环体，仅在本轮从 `windows_size_in_days` 取得一项赋给 `window_size`后走到本行时执行</p><p>先计算右侧：先取得 变量 <code>SUM_AMOUNT_TX_WINDOW</code> 当前引用的值，再与 变量 <code>NB_TX_WINDOW</code> 当前引用的值 做“除以”；数组或Series时通常逐元素计算，形状或索引须兼容。</p><p>把结果绑定到 <code>AVG_AMOUNT_TX_WINDOW</code>。名称原来的引用被替换；若右侧只是另一个对象变量，这通常是共享引用，不是自动复制。</p><ul>
+<li>求值 <code>SUM_AMOUNT_TX_WINDOW / NB_TX_WINDOW</code>：先取得 变量 <code>SUM_AMOUNT_TX_WINDOW</code> 当前引用的值，再与 变量 <code>NB_TX_WINDOW</code> 当前引用的值 做“除以”；数组或Series时通常逐元素计算，形状或索引须兼容</li>
+</ul><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li><code>=</code> 在赋值位置把右侧结果交给左侧；在调用的 <code>参数名=值</code> 中则指定参数，不是在比较。</li>
+<li>行首缩进说明它处于某个函数、循环、分支或括号续行中；不要仅看视觉对齐就判断执行次数。</li>
+</ul></details></td></tr><tr id="cell-19-line-20"><td class="codecell"><a class="row-label" href="#cell-19-line-20">第 20 行</a><pre><code>        # Save feature values</code></pre></td><td><p class="scope">本行是注释，不执行。所在上下文：仅在调用 `get_customer_spending_behaviour_features` 并执行到本行时发生；仅执行 def 不执行这段函数体；属于循环体，仅在本轮从 `windows_size_in_days` 取得一项赋给 `window_size`后走到本行时执行</p><p>原作者的说明性注释：Save feature values</p><p>该行不执行赋值、计算或训练。注释与实际实现不一致时，需按代码核对。</p><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li>本行 <code>#</code> 注释供人阅读，不参与运算；字符串内部的 # 不是注释标记。</li>
+<li>行首缩进说明它处于某个函数、循环、分支或括号续行中；不要仅看视觉对齐就判断执行次数。</li>
+</ul></details></td></tr><tr id="cell-19-line-21"><td class="codecell"><a class="row-label" href="#cell-19-line-21">第 21 行</a><pre><code>        customer_transactions[&#x27;CUSTOMER_ID_NB_TX_&#x27;+str(window_size)+&#x27;DAY_WINDOW&#x27;]=list(NB_TX_WINDOW)</code></pre></td><td><p class="scope">仅在调用 `get_customer_spending_behaviour_features` 并执行到本行时发生；仅执行 def 不执行这段函数体；属于循环体，仅在本轮从 `windows_size_in_days` 取得一项赋给 `window_size`后走到本行时执行</p><p>先计算右侧：按 <code>list</code> 对输入进行构造或类型转换。传入：位置参数1是 <code>NB_TX_WINDOW</code>。</p><p>再把结果写到 <code>customer_transactions['CUSTOMER_ID_NB_TX_' + str(window_size) + 'DAY_WINDOW']</code> 指定的位置或列；若是DataFrame列赋值，需要检查行数、索引对齐和是否覆盖已有列。</p><ul>
+<li>求值 <code>list(NB_TX_WINDOW)</code>：按 <code>list</code> 对输入进行构造或类型转换。传入：位置参数1是 <code>NB_TX_WINDOW</code></li>
+</ul><ul>
+<li>调用 <code>list</code> 时的位置参数1：<code>NB_TX_WINDOW</code>；先求出该表达式再传入</li>
+<li>调用 <code>str</code> 时的位置参数1：<code>window_size</code>；先求出该表达式再传入</li>
+</ul><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li><code>=</code> 在赋值位置把右侧结果交给左侧；在调用的 <code>参数名=值</code> 中则指定参数，不是在比较。</li>
+<li>方括号可能创建列表，也可能是已有对象的索引/切片。<code>表[列名]</code>、<code>表[条件]</code> 与 <code>[值1,值2]</code> 的用途不同。</li>
+<li>圆括号在可调用表达式后可表示调用，也可用于运算分组、元组或类的基类声明；应结合当前语句。</li>
+<li>行首缩进说明它处于某个函数、循环、分支或括号续行中；不要仅看视觉对齐就判断执行次数。</li>
+<li><code>window_size</code>：本轮滚动窗口长度</li>
+</ul></details></td></tr><tr id="cell-19-line-22"><td class="codecell"><a class="row-label" href="#cell-19-line-22">第 22 行</a><pre><code>        customer_transactions[&#x27;CUSTOMER_ID_AVG_AMOUNT_&#x27;+str(window_size)+&#x27;DAY_WINDOW&#x27;]=list(AVG_AMOUNT_TX_WINDOW)</code></pre></td><td><p class="scope">仅在调用 `get_customer_spending_behaviour_features` 并执行到本行时发生；仅执行 def 不执行这段函数体；属于循环体，仅在本轮从 `windows_size_in_days` 取得一项赋给 `window_size`后走到本行时执行</p><p>先计算右侧：按 <code>list</code> 对输入进行构造或类型转换。传入：位置参数1是 <code>AVG_AMOUNT_TX_WINDOW</code>。</p><p>再把结果写到 <code>customer_transactions['CUSTOMER_ID_AVG_AMOUNT_' + str(window_size) + 'DAY_WINDOW']</code> 指定的位置或列；若是DataFrame列赋值，需要检查行数、索引对齐和是否覆盖已有列。</p><ul>
+<li>求值 <code>list(AVG_AMOUNT_TX_WINDOW)</code>：按 <code>list</code> 对输入进行构造或类型转换。传入：位置参数1是 <code>AVG_AMOUNT_TX_WINDOW</code></li>
+</ul><ul>
+<li>调用 <code>list</code> 时的位置参数1：<code>AVG_AMOUNT_TX_WINDOW</code>；先求出该表达式再传入</li>
+<li>调用 <code>str</code> 时的位置参数1：<code>window_size</code>；先求出该表达式再传入</li>
+</ul><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li><code>=</code> 在赋值位置把右侧结果交给左侧；在调用的 <code>参数名=值</code> 中则指定参数，不是在比较。</li>
+<li>方括号可能创建列表，也可能是已有对象的索引/切片。<code>表[列名]</code>、<code>表[条件]</code> 与 <code>[值1,值2]</code> 的用途不同。</li>
+<li>圆括号在可调用表达式后可表示调用，也可用于运算分组、元组或类的基类声明；应结合当前语句。</li>
+<li>行首缩进说明它处于某个函数、循环、分支或括号续行中；不要仅看视觉对齐就判断执行次数。</li>
+<li><code>window_size</code>：本轮滚动窗口长度</li>
+</ul></details></td></tr><tr id="cell-19-line-24"><td class="codecell"><a class="row-label" href="#cell-19-line-24">第 24 行</a><pre><code>    # Reindex according to transaction IDs</code></pre></td><td><p class="scope">本行是注释，不执行。所在上下文：仅在调用 `get_customer_spending_behaviour_features` 并执行到本行时发生；仅执行 def 不执行这段函数体</p><p>原作者的说明性注释：Reindex according to transaction IDs</p><p>该行不执行赋值、计算或训练。注释与实际实现不一致时，需按代码核对。</p><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li>本行 <code>#</code> 注释供人阅读，不参与运算；字符串内部的 # 不是注释标记。</li>
+<li>行首缩进说明它处于某个函数、循环、分支或括号续行中；不要仅看视觉对齐就判断执行次数。</li>
+</ul></details></td></tr><tr id="cell-19-line-25"><td class="codecell"><a class="row-label" href="#cell-19-line-25">第 25 行</a><pre><code>    customer_transactions.index=customer_transactions.TRANSACTION_ID</code></pre></td><td><p class="scope">仅在调用 `get_customer_spending_behaviour_features` 并执行到本行时发生；仅执行 def 不执行这段函数体</p><p>先计算右侧：访问 <code>customer_transactions</code> 的 <code>TRANSACTION_ID</code> 属性或成员。</p><p>把结果保存到 <code>customer_transactions.index</code> 指定的对象属性；这会改变该对象的状态。</p><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li><code>=</code> 在赋值位置把右侧结果交给左侧；在调用的 <code>参数名=值</code> 中则指定参数，不是在比较。</li>
+<li>点号从左侧对象或模块中取属性/方法；后接 <code>(...)</code> 才是在调用可调用成员。</li>
+<li>行首缩进说明它处于某个函数、循环、分支或括号续行中；不要仅看视觉对齐就判断执行次数。</li>
+<li><code>TRANSACTION_ID</code>：交易标识</li>
+</ul></details></td></tr><tr id="cell-19-line-27"><td class="codecell"><a class="row-label" href="#cell-19-line-27">第 27 行</a><pre><code>    # And return the dataframe with the new features</code></pre></td><td><p class="scope">本行是注释，不执行。所在上下文：仅在调用 `get_customer_spending_behaviour_features` 并执行到本行时发生；仅执行 def 不执行这段函数体</p><p>原作者的说明性注释：And return the dataframe with the new features</p><p>该行不执行赋值、计算或训练。注释与实际实现不一致时，需按代码核对。</p><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li>本行 <code>#</code> 注释供人阅读，不参与运算；字符串内部的 # 不是注释标记。</li>
+<li>行首缩进说明它处于某个函数、循环、分支或括号续行中；不要仅看视觉对齐就判断执行次数。</li>
+</ul></details></td></tr><tr id="cell-19-line-28"><td class="codecell"><a class="row-label" href="#cell-19-line-28">第 28 行</a><pre><code>    return customer_transactions</code></pre></td><td><p class="scope">仅在调用 `get_customer_spending_behaviour_features` 并执行到本行时发生；仅执行 def 不执行这段函数体</p><p>计算要返回的内容：变量 <code>customer_transactions</code> 当前引用的值。</p><p>立即结束本次函数调用，把这个结果交回调用处；这次函数调用中后面的语句不再执行。返回表不等于自动写入磁盘。</p><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li>行首缩进说明它处于某个函数、循环、分支或括号续行中；不要仅看视觉对齐就判断执行次数。</li>
+</ul></details></td></tr></tbody></table></div><details class="historical"><summary>原书保存的历史输出 · 本次未运行</summary><p class="muted">以下内容原本就在 Notebook 文件中；其中的数字、图、警告与耗时不代表你当前电脑的运行结果。</p><p class="muted">原文件没有为本格保存输出。这里不填造运行结果。</p></details><div class="cell-nav"><a href="#cell-16">← 上一格代码</a><a href="#cell-21">下一格代码 →</a></div></article><details class="original" id="original-20"><summary>原单元格 20 · 原书说明</summary><div class="original-content"><p>Let us compute these aggregates for the first customer.</p></div></details><article class="cell" id="cell-21" data-cell="21"><div class="tag">原单元格 21 · 2 行 · 专项补注 + 逐行语法</div><h2 class="cell-title">spending_behaviour_customer_0=get_customer_spending_behaviour_features(trans…</h2><p><strong>这格解决什么：</strong> 先对客户 0 单独试算，检查函数返回的新列。</p><div class="states"><div class="state"><strong>执行前</strong><p>整张表含许多客户；滚动函数已经定义。</p></div><div class="state"><strong>执行后</strong><p>spending_behaviour_customer_0 保存筛出的客户 0 的加工结果；本格没有把结果统一合并回全体客户。</p></div></div><h3>原代码 · 保持原样</h3><pre class="source"><span class="sr-only">原始代码，行号仅供定位。</span><span class="code-line"><span class="line-no">001</span><code>spending_behaviour_customer_0=get_customer_spending_behaviour_features(transactions_df[transactions_df.CUSTOMER_ID==0])</code></span><span class="code-line"><span class="line-no">002</span><code>spending_behaviour_customer_0</code></span></pre><div class="walkthrough"><h3>顺着代码看数据怎样变化</h3><p>最内层比较 <code>CUSTOMER_ID==0</code> 得到掩码，筛出该客户全部记录，然后整张客户子表作为函数的第一个参数。没有传第二个参数，因此采用默认 <code>[1,7,30]</code>。返回值由左边长变量名接住，下一行单独写变量让 Notebook 展示它。</p>
+<p>人工例子：全表有 A 两行、B 三行，筛选 A 后函数只看那两行，不会将 B 的三笔算入 A 的历史。这个试算的价值是检查一名客户按时间相邻的几行，亲手验证新列，而非只看全表出现了几个新字段。</p></div><div class="dependencies"><strong>追踪被调用的教材函数</strong><p><a href="02-BaselineFeatureTransformation.html#cell-19"><code>get_customer_spending_behaviour_features</code> → 原单元格 19</a></p><small>链接优先当前笔记本的前置定义，其次公共函数。原环境若由外部脚本覆盖同名函数，还需核对实际绑定。</small></div><h3>一行一行读 · 可展开符号解释</h3><div class="line-table-wrap"><table class="line-table"><thead><tr><th>原始代码 · 逐行定位</th><th>动作与状态变化</th></tr></thead><tbody><tr id="cell-21-line-1"><td class="codecell"><a class="row-label" href="#cell-21-line-1">第 1 行</a><pre><code>spending_behaviour_customer_0=get_customer_spending_behaviour_features(transactions_df[transactions_df.CUSTOMER_ID==0])</code></pre></td><td><p class="scope">处于单元格顶层；真正执行本cell并到达此语句时才发生，静态精读本身不执行代码</p><p>先计算右侧：调用 <code>get_customer_spending_behaviour_features</code>；它的返回值与副作用由此函数或类的定义决定，不能只凭名字推定数值。传入：位置参数1是 <code>transactions_df[transactions_df.CUSTOMER_ID == 0]</code>。</p><p>把结果绑定到 <code>spending_behaviour_customer_0</code>。名称原来的引用被替换；若右侧只是另一个对象变量，这通常是共享引用，不是自动复制。</p><ul>
+<li>求值 <code>transactions_df.CUSTOMER_ID == 0</code>：判断<code>transactions_df.CUSTOMER_ID</code> 是否等于 <code>0</code>；标量比较通常给一个布尔值，数组或Series比较通常逐项给布尔值</li>
+<li>求值 <code>transactions_df[transactions_df.CUSTOMER_ID == 0]</code>：从 <code>transactions_df</code> 中按 <code>transactions_df.CUSTOMER_ID == 0</code> 取值；字符串常指列或字典键，布尔序列常用于筛选，整数的含义取决于对象的索引规则</li>
+<li>求值 <code>get_customer_spending_behaviour_features(transactions_df[transactions_df.CUSTOMER_ID == 0])</code>：调用 <code>get_customer_spending_behaviour_features</code>；它的返回值与副作用由此函数或类的定义决定，不能只凭名字推定数值。传入：位置参数1是 <code>transactions_df[transactions_df.CUSTOMER_ID == 0]</code></li>
+</ul><ul>
+<li>调用 <code>get_customer_spending_behaviour_features</code> 时的位置参数1：<code>transactions_df[transactions_df.CUSTOMER_ID == 0]</code>；先求出该表达式再传入</li>
+</ul><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li><code>=</code> 在赋值位置把右侧结果交给左侧；在调用的 <code>参数名=值</code> 中则指定参数，不是在比较。</li>
+<li>比较符生成判断结果；<code>==</code> 比较值是否相等，<code>=</code> 用于赋值或具名参数。</li>
+<li>点号从左侧对象或模块中取属性/方法；后接 <code>(...)</code> 才是在调用可调用成员。</li>
+<li>方括号可能创建列表，也可能是已有对象的索引/切片。<code>表[列名]</code>、<code>表[条件]</code> 与 <code>[值1,值2]</code> 的用途不同。</li>
+<li>圆括号在可调用表达式后可表示调用，也可用于运算分组、元组或类的基类声明；应结合当前语句。</li>
+<li><code>CUSTOMER_ID</code>：客户标识，不表示连续风险等级</li>
+<li><code>transactions_df</code>：交易明细 DataFrame，每行通常对应一笔交易</li>
+</ul></details></td></tr><tr id="cell-21-line-2"><td class="codecell"><a class="row-label" href="#cell-21-line-2">第 2 行</a><pre><code>spending_behaviour_customer_0</code></pre></td><td><p class="scope">处于单元格顶层；真正执行本cell并到达此语句时才发生，静态精读本身不执行代码</p><p>变量 <code>spending_behaviour_customer_0</code> 当前引用的值。</p><p>本行没有用等号把返回值另存到名称。若是对象方法可能有副作用；若是单元格最后一个表达式，Jupyter通常会显示其返回结果。</p></td></tr></tbody></table></div><details class="historical"><summary>原书保存的历史输出 · 本次未运行</summary><p class="muted">以下内容原本就在 Notebook 文件中；其中的数字、图、警告与耗时不代表你当前电脑的运行结果。</p><div class="historic-table"><div>
+
+<table border="1" class="dataframe">
+<thead>
+<tr>
+<th></th>
+<th>TRANSACTION_ID</th>
+<th>TX_DATETIME</th>
+<th>CUSTOMER_ID</th>
+<th>TERMINAL_ID</th>
+<th>TX_AMOUNT</th>
+<th>TX_TIME_SECONDS</th>
+<th>TX_TIME_DAYS</th>
+<th>TX_FRAUD</th>
+<th>TX_FRAUD_SCENARIO</th>
+<th>TX_DURING_WEEKEND</th>
+<th>TX_DURING_NIGHT</th>
+<th>CUSTOMER_ID_NB_TX_1DAY_WINDOW</th>
+<th>CUSTOMER_ID_AVG_AMOUNT_1DAY_WINDOW</th>
+<th>CUSTOMER_ID_NB_TX_7DAY_WINDOW</th>
+<th>CUSTOMER_ID_AVG_AMOUNT_7DAY_WINDOW</th>
+<th>CUSTOMER_ID_NB_TX_30DAY_WINDOW</th>
+<th>CUSTOMER_ID_AVG_AMOUNT_30DAY_WINDOW</th>
+</tr>
+<tr>
+<th>TRANSACTION_ID</th>
+<th></th>
+<th></th>
+<th></th>
+<th></th>
+<th></th>
+<th></th>
+<th></th>
+<th></th>
+<th></th>
+<th></th>
+<th></th>
+<th></th>
+<th></th>
+<th></th>
+<th></th>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<th>1758</th>
+<td>1758</td>
+<td>2018-04-01 07:19:05</td>
+<td>0</td>
+<td>6076</td>
+<td>123.59</td>
+<td>26345</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>1</td>
+<td>0</td>
+<td>1.0</td>
+<td>123.590000</td>
+<td>1.0</td>
+<td>123.590000</td>
+<td>1.0</td>
+<td>123.590000</td>
+</tr>
+<tr>
+<th>8275</th>
+<td>8275</td>
+<td>2018-04-01 18:00:16</td>
+<td>0</td>
+<td>858</td>
+<td>77.34</td>
+<td>64816</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>1</td>
+<td>0</td>
+<td>2.0</td>
+<td>100.465000</td>
+<td>2.0</td>
+<td>100.465000</td>
+<td>2.0</td>
+<td>100.465000</td>
+</tr>
+<tr>
+<th>8640</th>
+<td>8640</td>
+<td>2018-04-01 19:02:02</td>
+<td>0</td>
+<td>6698</td>
+<td>46.51</td>
+<td>68522</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>1</td>
+<td>0</td>
+<td>3.0</td>
+<td>82.480000</td>
+<td>3.0</td>
+<td>82.480000</td>
+<td>3.0</td>
+<td>82.480000</td>
+</tr>
+<tr>
+<th>12169</th>
+<td>12169</td>
+<td>2018-04-02 08:51:06</td>
+<td>0</td>
+<td>6569</td>
+<td>54.72</td>
+<td>118266</td>
+<td>1</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>3.0</td>
+<td>59.523333</td>
+<td>4.0</td>
+<td>75.540000</td>
+<td>4.0</td>
+<td>75.540000</td>
+</tr>
+<tr>
+<th>15764</th>
+<td>15764</td>
+<td>2018-04-02 14:05:38</td>
+<td>0</td>
+<td>7707</td>
+<td>63.30</td>
+<td>137138</td>
+<td>1</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>4.0</td>
+<td>60.467500</td>
+<td>5.0</td>
+<td>73.092000</td>
+<td>5.0</td>
+<td>73.092000</td>
+</tr>
+<tr>
+<th>...</th>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+</tr>
+<tr>
+<th>1750390</th>
+<td>1750390</td>
+<td>2018-09-30 13:38:41</td>
+<td>0</td>
+<td>3096</td>
+<td>38.23</td>
+<td>15773921</td>
+<td>182</td>
+<td>0</td>
+<td>0</td>
+<td>1</td>
+<td>0</td>
+<td>5.0</td>
+<td>64.388000</td>
+<td>28.0</td>
+<td>57.306429</td>
+<td>89.0</td>
+<td>63.097640</td>
+</tr>
+<tr>
+<th>1750758</th>
+<td>1750758</td>
+<td>2018-09-30 14:10:21</td>
+<td>0</td>
+<td>9441</td>
+<td>43.60</td>
+<td>15775821</td>
+<td>182</td>
+<td>0</td>
+<td>0</td>
+<td>1</td>
+<td>0</td>
+<td>6.0</td>
+<td>60.923333</td>
+<td>29.0</td>
+<td>56.833793</td>
+<td>89.0</td>
+<td>62.433933</td>
+</tr>
+<tr>
+<th>1751039</th>
+<td>1751039</td>
+<td>2018-09-30 14:34:30</td>
+<td>0</td>
+<td>1138</td>
+<td>69.69</td>
+<td>15777270</td>
+<td>182</td>
+<td>0</td>
+<td>0</td>
+<td>1</td>
+<td>0</td>
+<td>7.0</td>
+<td>62.175714</td>
+<td>29.0</td>
+<td>57.872414</td>
+<td>90.0</td>
+<td>62.514556</td>
+</tr>
+<tr>
+<th>1751272</th>
+<td>1751272</td>
+<td>2018-09-30 14:54:59</td>
+<td>0</td>
+<td>9441</td>
+<td>91.26</td>
+<td>15778499</td>
+<td>182</td>
+<td>0</td>
+<td>0</td>
+<td>1</td>
+<td>0</td>
+<td>8.0</td>
+<td>65.811250</td>
+<td>30.0</td>
+<td>58.985333</td>
+<td>90.0</td>
+<td>61.882333</td>
+</tr>
+<tr>
+<th>1751455</th>
+<td>1751455</td>
+<td>2018-09-30 15:11:37</td>
+<td>0</td>
+<td>2746</td>
+<td>27.90</td>
+<td>15779497</td>
+<td>182</td>
+<td>0</td>
+<td>0</td>
+<td>1</td>
+<td>0</td>
+<td>9.0</td>
+<td>61.598889</td>
+<td>31.0</td>
+<td>57.982581</td>
+<td>91.0</td>
+<td>61.508901</td>
+</tr>
+</tbody>
+</table>
+<p>384 rows × 17 columns</p>
+</div></div></details><div class="cell-nav"><a href="#cell-19">← 上一格代码</a><a href="#cell-23">下一格代码 →</a></div></article><details class="original" id="original-22"><summary>原单元格 22 · 原书说明</summary><div class="original-content"><p>We can check that the new features are consistent with the customer profile (see the previous notebook). For customer 0, the mean amount was <code>mean_amount</code>=62.26, and the transaction frequency was <code>mean_nb_tx_per_day</code>=2.18. These values are indeed closely matched by the features <code>CUSTOMER_ID_NB_TX_30DAY_WINDOW</code> and <code>CUSTOMER_ID_AVG_AMOUNT_30DAY_WINDOW</code>, especially after 30 days.</p>
+<p>Let us now generate these features for all customers. This is straightforward using the Panda <code>groupby</code> and <code>apply</code> methods.</p></div></details><article class="cell" id="cell-23" data-cell="23"><div class="tag">原单元格 23 · 2 行 · 专项补注 + 逐行语法</div><h2 class="cell-title">%time transactions_df=transactions_df.groupby(&#x27;CUSTOMER_ID&#x27;).apply(lambda x:…</h2><p><strong>这格解决什么：</strong> 将同一消费特征函数扩展到所有客户。</p><div class="states"><div class="state"><strong>执行前</strong><p>transactions_df 是全体交易表，客户函数能处理一组。</p></div><div class="state"><strong>执行后</strong><p>每位客户的加工结果组合成总表，再按时间排序和重置索引。</p></div></div><h3>原代码 · 保持原样</h3><pre class="source"><span class="sr-only">原始代码，行号仅供定位。</span><span class="code-line"><span class="line-no">001</span><code>%time transactions_df=transactions_df.groupby(&#x27;CUSTOMER_ID&#x27;).apply(lambda x: get_customer_spending_behaviour_features(x, windows_size_in_days=[1,7,30]))</code></span><span class="code-line"><span class="line-no">002</span><code>transactions_df=transactions_df.sort_values(&#x27;TX_DATETIME&#x27;).reset_index(drop=True)</code></span></pre><div class="walkthrough"><h3>顺着代码看数据怎样变化</h3><p><code>.groupby('CUSTOMER_ID')</code> 按客户分组。<code>lambda x: ...</code> 创建临时函数，其中 <code>x</code> 是这一次传入的一位客户的小表，并不是单个金额。<code>.apply(...)</code> 每组调用一次，将结果组合。</p>
+<p>人工追踪：原表四行依次 A1、B1、A2、B2；分组后函数先看到 <code>[A1,A2]</code>、再看到 <code>[B1,B2]</code>。每组独立算窗口，不串客户；拼回时可能形成包含分组键的层次索引，后续 <code>sort_values('TX_DATETIME')</code> 恢复按时间阅读的顺序，<code>reset_index(drop=True)</code> 丢弃旧索引并编号 0、1、2、3。业务列 <code>TRANSACTION_ID</code> 与重建的行号不是同一个概念。</p>
+<p>新表赋回同名变量后，后续代码使用加工后的表；你没有必要为此在脑中保留每个随机金额，但必须知道每一列来自哪位客户、哪一个窗口。</p></div><div class="notice"><strong>需要辨清的地方</strong><ul>
+<li>不同 pandas 版本对 groupby.apply 的分组列和索引处理可能不同；本解析保留原代码，不宣称已在当前环境跑通。</li>
+</ul></div><div class="dependencies"><strong>追踪被调用的教材函数</strong><p><a href="02-BaselineFeatureTransformation.html#cell-19"><code>get_customer_spending_behaviour_features</code> → 原单元格 19</a></p><small>链接优先当前笔记本的前置定义，其次公共函数。原环境若由外部脚本覆盖同名函数，还需核对实际绑定。</small></div><h3>一行一行读 · 可展开符号解释</h3><div class="line-table-wrap"><table class="line-table"><thead><tr><th>原始代码 · 逐行定位</th><th>动作与状态变化</th></tr></thead><tbody><tr id="cell-23-line-1"><td class="codecell"><a class="row-label" href="#cell-23-line-1">第 1 行</a><pre><code>%time transactions_df=transactions_df.groupby(&#x27;CUSTOMER_ID&#x27;).apply(lambda x: get_customer_spending_behaviour_features(x, windows_size_in_days=[1,7,30]))</code></pre></td><td><p class="scope">处于单元格顶层；真正执行本cell并到达此语句时才发生，静态精读本身不执行代码</p><p>IPython 的 %time 会执行后面的语句并记录耗时；计时结果取决于运行环境。 先计算右侧：将给定函数应用到指定对象的元素、行列或分组；准确粒度由接收对象和 axis 决定。传入：位置参数1是 <code>lambda x: get_customer_spending_behaviour_features(x, windows_size_in_days=[1, 7, 30])</code>。</p><p>把结果绑定到 <code>transactions_df</code>。名称原来的引用被替换；若右侧只是另一个对象变量，这通常是共享引用，不是自动复制。</p><ul>
+<li>求值 <code>transactions_df.groupby('CUSTOMER_ID')</code>：按键划分组，先形成分组对象；后面的聚合或 apply 才决定输出。传入：位置参数1是 <code>'CUSTOMER_ID'</code></li>
+<li><code>lambda x: get_customer_spending_behaviour_features(x, windows_size_in_days=[1, 7, 30])</code>：定义临时函数，接收 <code>x</code>，调用时计算并返回 <code>get_customer_spending_behaviour_features(x, windows_size_in_days=[1, 7, 30])</code></li>
+<li>求值 <code>transactions_df.groupby('CUSTOMER_ID').apply(lambda x: get_customer_spending_behaviour_features(x, windows_size_in_days=[1, 7, 30]))</code>：将给定函数应用到指定对象的元素、行列或分组；准确粒度由接收对象和 axis 决定。传入：位置参数1是 <code>lambda x: get_customer_spending_behaviour_features(x, windows_size_in_days=[1, 7, 30])</code></li>
+</ul><ul>
+<li>调用 <code>transactions_df.groupby('CUSTOMER_ID').apply</code> 时的位置参数1：<code>lambda x: get_customer_spending_behaviour_features(x, windows_size_in_days=[1, 7, 30])</code>；先求出该表达式再传入</li>
+<li>调用 <code>transactions_df.groupby</code> 时的位置参数1：<code>'CUSTOMER_ID'</code>；先求出该表达式再传入</li>
+<li>调用 <code>get_customer_spending_behaviour_features</code> 时的位置参数1：<code>x</code>；先求出该表达式再传入</li>
+<li>调用 <code>get_customer_spending_behaviour_features</code> 时的具名参数 <code>windows_size_in_days</code> 接收 <code>[1, 7, 30]</code></li>
+</ul><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li><code>=</code> 在赋值位置把右侧结果交给左侧；在调用的 <code>参数名=值</code> 中则指定参数，不是在比较。</li>
+<li>点号从左侧对象或模块中取属性/方法；后接 <code>(...)</code> 才是在调用可调用成员。</li>
+<li>方括号可能创建列表，也可能是已有对象的索引/切片。<code>表[列名]</code>、<code>表[条件]</code> 与 <code>[值1,值2]</code> 的用途不同。</li>
+<li>圆括号在可调用表达式后可表示调用，也可用于运算分组、元组或类的基类声明；应结合当前语句。</li>
+<li>冒号在语句末尾引出缩进块，在方括号内可表示切片，在字典内分隔键和值。</li>
+<li>逗号分隔参数、元素或解包目标，项目的先后顺序可能决定字段或维度对应。</li>
+<li><code>transactions_df</code>：交易明细 DataFrame，每行通常对应一笔交易</li>
+<li><code>windows_size_in_days</code>：需要分别计算的多个窗口天数</li>
+</ul></details></td></tr><tr id="cell-23-line-2"><td class="codecell"><a class="row-label" href="#cell-23-line-2">第 2 行</a><pre><code>transactions_df=transactions_df.sort_values(&#x27;TX_DATETIME&#x27;).reset_index(drop=True)</code></pre></td><td><p class="scope">处于单元格顶层；真正执行本cell并到达此语句时才发生，静态精读本身不执行代码</p><p>先计算右侧：重置行索引；drop=True 丢弃旧索引，否则旧索引通常转为列。传入：<code>drop=True</code> 是具名参数。</p><p>把结果绑定到 <code>transactions_df</code>。名称原来的引用被替换；若右侧只是另一个对象变量，这通常是共享引用，不是自动复制。</p><ul>
+<li>求值 <code>transactions_df.sort_values('TX_DATETIME')</code>：按给定列排序；默认返回排序结果，只有明确 inplace 才原地修改。传入：位置参数1是 <code>'TX_DATETIME'</code></li>
+<li>求值 <code>transactions_df.sort_values('TX_DATETIME').reset_index(drop=True)</code>：重置行索引；drop=True 丢弃旧索引，否则旧索引通常转为列。传入：<code>drop=True</code> 是具名参数</li>
+</ul><ul>
+<li>调用 <code>transactions_df.sort_values('TX_DATETIME').reset_index</code> 时的具名参数 <code>drop</code> 接收 <code>True</code></li>
+<li>调用 <code>transactions_df.sort_values</code> 时的位置参数1：<code>'TX_DATETIME'</code>；先求出该表达式再传入</li>
+</ul><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li><code>=</code> 在赋值位置把右侧结果交给左侧；在调用的 <code>参数名=值</code> 中则指定参数，不是在比较。</li>
+<li>点号从左侧对象或模块中取属性/方法；后接 <code>(...)</code> 才是在调用可调用成员。</li>
+<li>圆括号在可调用表达式后可表示调用，也可用于运算分组、元组或类的基类声明；应结合当前语句。</li>
+<li><code>transactions_df</code>：交易明细 DataFrame，每行通常对应一笔交易</li>
+</ul></details></td></tr></tbody></table></div><details class="historical"><summary>原书保存的历史输出 · 本次未运行</summary><p class="muted">以下内容原本就在 Notebook 文件中；其中的数字、图、警告与耗时不代表你当前电脑的运行结果。</p><pre class="historic-text">CPU times: user 1min 2s, sys: 1.21 s, total: 1min 3s
+Wall time: 1min 7s
+</pre></details><div class="cell-nav"><a href="#cell-21">← 上一格代码</a><a href="#cell-24">下一格代码 →</a></div></article><article class="cell" id="cell-24" data-cell="24"><div class="tag">原单元格 24 · 1 行 · 专项补注 + 逐行语法</div><h2 class="cell-title">transactions_df</h2><p><strong>这格解决什么：</strong> 查看加入客户消费特征后的总表。</p><div class="states"><div class="state"><strong>执行前</strong><p>上一格已将加工结果赋回 transactions_df。</p></div><div class="state"><strong>执行后</strong><p>只是显示当前对象；没有再计算一轮窗口。</p></div></div><h3>原代码 · 保持原样</h3><pre class="source"><span class="sr-only">原始代码，行号仅供定位。</span><span class="code-line"><span class="line-no">001</span><code>transactions_df</code></span></pre><div class="walkthrough"><h3>顺着代码看数据怎样变化</h3><p>检查三对字段的列名：每个天数对应 NB_TX 与 AVG_AMOUNT。表很宽时 Notebook 可能用省略号隐藏中间列，省略号不等于字段不存在。底部形状表示全表范围，屏幕上展示的前后几行只是格式化摘要。要理解一个具体结果，应回到同一客户的时间序列逐笔手算，而不是从不同客户的相邻显示行推断窗口。</p></div><h3>一行一行读 · 可展开符号解释</h3><div class="line-table-wrap"><table class="line-table"><thead><tr><th>原始代码 · 逐行定位</th><th>动作与状态变化</th></tr></thead><tbody><tr id="cell-24-line-1"><td class="codecell"><a class="row-label" href="#cell-24-line-1">第 1 行</a><pre><code>transactions_df</code></pre></td><td><p class="scope">处于单元格顶层；真正执行本cell并到达此语句时才发生，静态精读本身不执行代码</p><p>变量 <code>transactions_df</code> 当前引用的值。</p><p>本行没有用等号把返回值另存到名称。若是对象方法可能有副作用；若是单元格最后一个表达式，Jupyter通常会显示其返回结果。</p><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li><code>transactions_df</code>：交易明细 DataFrame，每行通常对应一笔交易</li>
+</ul></details></td></tr></tbody></table></div><details class="historical"><summary>原书保存的历史输出 · 本次未运行</summary><p class="muted">以下内容原本就在 Notebook 文件中；其中的数字、图、警告与耗时不代表你当前电脑的运行结果。</p><div class="historic-table"><div>
+
+<table border="1" class="dataframe">
+<thead>
+<tr>
+<th></th>
+<th>TRANSACTION_ID</th>
+<th>TX_DATETIME</th>
+<th>CUSTOMER_ID</th>
+<th>TERMINAL_ID</th>
+<th>TX_AMOUNT</th>
+<th>TX_TIME_SECONDS</th>
+<th>TX_TIME_DAYS</th>
+<th>TX_FRAUD</th>
+<th>TX_FRAUD_SCENARIO</th>
+<th>TX_DURING_WEEKEND</th>
+<th>TX_DURING_NIGHT</th>
+<th>CUSTOMER_ID_NB_TX_1DAY_WINDOW</th>
+<th>CUSTOMER_ID_AVG_AMOUNT_1DAY_WINDOW</th>
+<th>CUSTOMER_ID_NB_TX_7DAY_WINDOW</th>
+<th>CUSTOMER_ID_AVG_AMOUNT_7DAY_WINDOW</th>
+<th>CUSTOMER_ID_NB_TX_30DAY_WINDOW</th>
+<th>CUSTOMER_ID_AVG_AMOUNT_30DAY_WINDOW</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<th>0</th>
+<td>0</td>
+<td>2018-04-01 00:00:31</td>
+<td>596</td>
+<td>3156</td>
+<td>57.16</td>
+<td>31</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>1</td>
+<td>1</td>
+<td>1.0</td>
+<td>57.160000</td>
+<td>1.0</td>
+<td>57.160000</td>
+<td>1.0</td>
+<td>57.160000</td>
+</tr>
+<tr>
+<th>1</th>
+<td>1</td>
+<td>2018-04-01 00:02:10</td>
+<td>4961</td>
+<td>3412</td>
+<td>81.51</td>
+<td>130</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>1</td>
+<td>1</td>
+<td>1.0</td>
+<td>81.510000</td>
+<td>1.0</td>
+<td>81.510000</td>
+<td>1.0</td>
+<td>81.510000</td>
+</tr>
+<tr>
+<th>2</th>
+<td>2</td>
+<td>2018-04-01 00:07:56</td>
+<td>2</td>
+<td>1365</td>
+<td>146.00</td>
+<td>476</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>1</td>
+<td>1</td>
+<td>1.0</td>
+<td>146.000000</td>
+<td>1.0</td>
+<td>146.000000</td>
+<td>1.0</td>
+<td>146.000000</td>
+</tr>
+<tr>
+<th>3</th>
+<td>3</td>
+<td>2018-04-01 00:09:29</td>
+<td>4128</td>
+<td>8737</td>
+<td>64.49</td>
+<td>569</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>1</td>
+<td>1</td>
+<td>1.0</td>
+<td>64.490000</td>
+<td>1.0</td>
+<td>64.490000</td>
+<td>1.0</td>
+<td>64.490000</td>
+</tr>
+<tr>
+<th>4</th>
+<td>4</td>
+<td>2018-04-01 00:10:34</td>
+<td>927</td>
+<td>9906</td>
+<td>50.99</td>
+<td>634</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>1</td>
+<td>1</td>
+<td>1.0</td>
+<td>50.990000</td>
+<td>1.0</td>
+<td>50.990000</td>
+<td>1.0</td>
+<td>50.990000</td>
+</tr>
+<tr>
+<th>...</th>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+</tr>
+<tr>
+<th>1754150</th>
+<td>1754150</td>
+<td>2018-09-30 23:56:36</td>
+<td>161</td>
+<td>655</td>
+<td>54.24</td>
+<td>15810996</td>
+<td>182</td>
+<td>0</td>
+<td>0</td>
+<td>1</td>
+<td>0</td>
+<td>2.0</td>
+<td>75.280000</td>
+<td>12.0</td>
+<td>67.047500</td>
+<td>72.0</td>
+<td>69.521111</td>
+</tr>
+<tr>
+<th>1754151</th>
+<td>1754151</td>
+<td>2018-09-30 23:57:38</td>
+<td>4342</td>
+<td>6181</td>
+<td>1.23</td>
+<td>15811058</td>
+<td>182</td>
+<td>0</td>
+<td>0</td>
+<td>1</td>
+<td>0</td>
+<td>1.0</td>
+<td>1.230000</td>
+<td>21.0</td>
+<td>22.173810</td>
+<td>93.0</td>
+<td>24.780753</td>
+</tr>
+<tr>
+<th>1754152</th>
+<td>1754152</td>
+<td>2018-09-30 23:58:21</td>
+<td>618</td>
+<td>1502</td>
+<td>6.62</td>
+<td>15811101</td>
+<td>182</td>
+<td>0</td>
+<td>0</td>
+<td>1</td>
+<td>0</td>
+<td>5.0</td>
+<td>7.368000</td>
+<td>21.0</td>
+<td>7.400476</td>
+<td>65.0</td>
+<td>7.864462</td>
+</tr>
+<tr>
+<th>1754153</th>
+<td>1754153</td>
+<td>2018-09-30 23:59:52</td>
+<td>4056</td>
+<td>3067</td>
+<td>55.40</td>
+<td>15811192</td>
+<td>182</td>
+<td>0</td>
+<td>0</td>
+<td>1</td>
+<td>0</td>
+<td>3.0</td>
+<td>100.696667</td>
+<td>16.0</td>
+<td>107.052500</td>
+<td>51.0</td>
+<td>102.919608</td>
+</tr>
+<tr>
+<th>1754154</th>
+<td>1754154</td>
+<td>2018-09-30 23:59:57</td>
+<td>3542</td>
+<td>9849</td>
+<td>23.59</td>
+<td>15811197</td>
+<td>182</td>
+<td>0</td>
+<td>0</td>
+<td>1</td>
+<td>0</td>
+<td>5.0</td>
+<td>41.304000</td>
+<td>24.0</td>
+<td>35.308333</td>
+<td>119.0</td>
+<td>37.251513</td>
+</tr>
+</tbody>
+</table>
+<p>1754155 rows × 17 columns</p>
+</div></div></details><div class="cell-nav"><a href="#cell-23">← 上一格代码</a><a href="#cell-27">下一格代码 →</a></div></article><details class="original" id="original-25"><summary>原单元格 25 · Terminal ID transformations</summary><div class="original-content"><h2>Terminal ID transformations</h2></div></details><details class="original" id="original-26"><summary>原单元格 26 · 原书说明</summary><div class="original-content"><p>Finally, let us proceed with the terminal ID transformations. The main goal will be to extract a <em>risk score</em>, that assesses the exposure of a given terminal ID to fraudulent transactions. The risk score will be defined as the average number of fraudulent transactions that occurred on a terminal ID over a time window. As for customer ID transformations, we will use three window sizes, of 1, 7, and 30 days.</p>
+<p>Contrary to customer ID transformations, the time windows will not directly precede a given transaction. Instead, they will be shifted back by a <em>delay period</em>. The delay period accounts for the fact that, in practice, the fraudulent transactions are only discovered after a fraud investigation or a customer complaint. Hence, the fraudulent labels, which are needed to compute the risk score, are only available after this delay period. To a first approximation, this delay period will be set to one week. The motivations for the delay period will be further argued in <a href="09-ValidationStrategies.html#original-1">Chapter 5, Validation strategies</a>. </p>
+<p>Let us perform the computation of the risk scores by defining a <code>get_count_risk_rolling_window</code> function. The function takes as inputs the DataFrame of transactions for a given terminal ID, the delay period, and a list of window sizes. In the first stage, the number of transactions and fraudulent transactions are computed for the delay period (<code>NB_TX_DELAY</code> and <code>NB_FRAUD_DELAY</code>). In the second stage, the number of transactions and fraudulent transactions are computed for each window size plus the delay period (<code>NB_TX_DELAY_WINDOW</code> and <code>NB_FRAUD_DELAY_WINDOW</code>). The number of transactions and fraudulent transactions that occurred for a given window size, shifted back by the delay period, is then obtained by simply computing the differences of the quantities obtained for the delay period, and the window size plus delay period:</p>
+<pre><code>NB_FRAUD_WINDOW=NB_FRAUD_DELAY_WINDOW-NB_FRAUD_DELAY
+NB_TX_WINDOW=NB_TX_DELAY_WINDOW-NB_TX_DELAY
+</code></pre>
+<p>The risk score is finally obtained by computing the proportion of fraudulent transactions for each window size (or 0 if no transaction occurred for the given window):</p>
+<pre><code>RISK_WINDOW=NB_FRAUD_WINDOW/NB_TX_WINDOW
+</code></pre>
+<p>Additionally to the risk score, the function also returns the number of transactions for each window size. This results in the addition of six new features: The risk and number of transactions, for three window sizes.</p></div></details><article class="cell" id="cell-27" data-cell="27"><div class="tag">原单元格 27 · 28 行 · 专项补注 + 逐行语法</div><h2 class="cell-title">get_count_risk_rolling_window</h2><p><strong>这格解决什么：</strong> 定义使用延迟标签的终端交易量与欺诈比例特征。</p><div class="states"><div class="state"><strong>执行前</strong><p>输入一台终端的交易表，标签在模拟数据中已知，但业务假设需等待 delay_period 天才能获得。</p></div><div class="state"><strong>执行后</strong><p>实际调用返回原行加 1、7、30 天窗口的交易数量和风险比例，共六列。</p></div></div><h3>原代码 · 保持原样</h3><pre class="source"><span class="sr-only">原始代码，行号仅供定位。</span><span class="code-line"><span class="line-no">001</span><code>def get_count_risk_rolling_window(terminal_transactions, delay_period=7, windows_size_in_days=[1,7,30], feature=&quot;TERMINAL_ID&quot;):</code></span><span class="code-line"><span class="line-no">002</span><code>    </code></span><span class="code-line"><span class="line-no">003</span><code>    terminal_transactions=terminal_transactions.sort_values(&#x27;TX_DATETIME&#x27;)</code></span><span class="code-line"><span class="line-no">004</span><code>    </code></span><span class="code-line"><span class="line-no">005</span><code>    terminal_transactions.index=terminal_transactions.TX_DATETIME</code></span><span class="code-line"><span class="line-no">006</span><code>    </code></span><span class="code-line"><span class="line-no">007</span><code>    NB_FRAUD_DELAY=terminal_transactions[&#x27;TX_FRAUD&#x27;].rolling(str(delay_period)+&#x27;d&#x27;).sum()</code></span><span class="code-line"><span class="line-no">008</span><code>    NB_TX_DELAY=terminal_transactions[&#x27;TX_FRAUD&#x27;].rolling(str(delay_period)+&#x27;d&#x27;).count()</code></span><span class="code-line"><span class="line-no">009</span><code>    </code></span><span class="code-line"><span class="line-no">010</span><code>    for window_size in windows_size_in_days:</code></span><span class="code-line"><span class="line-no">011</span><code>    </code></span><span class="code-line"><span class="line-no">012</span><code>        NB_FRAUD_DELAY_WINDOW=terminal_transactions[&#x27;TX_FRAUD&#x27;].rolling(str(delay_period+window_size)+&#x27;d&#x27;).sum()</code></span><span class="code-line"><span class="line-no">013</span><code>        NB_TX_DELAY_WINDOW=terminal_transactions[&#x27;TX_FRAUD&#x27;].rolling(str(delay_period+window_size)+&#x27;d&#x27;).count()</code></span><span class="code-line"><span class="line-no">014</span><code>    </code></span><span class="code-line"><span class="line-no">015</span><code>        NB_FRAUD_WINDOW=NB_FRAUD_DELAY_WINDOW-NB_FRAUD_DELAY</code></span><span class="code-line"><span class="line-no">016</span><code>        NB_TX_WINDOW=NB_TX_DELAY_WINDOW-NB_TX_DELAY</code></span><span class="code-line"><span class="line-no">017</span><code>    </code></span><span class="code-line"><span class="line-no">018</span><code>        RISK_WINDOW=NB_FRAUD_WINDOW/NB_TX_WINDOW</code></span><span class="code-line"><span class="line-no">019</span><code>        </code></span><span class="code-line"><span class="line-no">020</span><code>        terminal_transactions[feature+&#x27;_NB_TX_&#x27;+str(window_size)+&#x27;DAY_WINDOW&#x27;]=list(NB_TX_WINDOW)</code></span><span class="code-line"><span class="line-no">021</span><code>        terminal_transactions[feature+&#x27;_RISK_&#x27;+str(window_size)+&#x27;DAY_WINDOW&#x27;]=list(RISK_WINDOW)</code></span><span class="code-line"><span class="line-no">022</span><code>        </code></span><span class="code-line"><span class="line-no">023</span><code>    terminal_transactions.index=terminal_transactions.TRANSACTION_ID</code></span><span class="code-line"><span class="line-no">024</span><code>    </code></span><span class="code-line"><span class="line-no">025</span><code>    # Replace NA values with 0 (all undefined risk scores where NB_TX_WINDOW is 0) </code></span><span class="code-line"><span class="line-no">026</span><code>    terminal_transactions.fillna(0,inplace=True)</code></span><span class="code-line"><span class="line-no">027</span><code>    </code></span><span class="code-line"><span class="line-no">028</span><code>    return terminal_transactions</code></span></pre><div class="walkthrough"><h3>顺着代码看数据怎样变化</h3><p>核心不是直接对过去一天 <code>TX_FRAUD.mean()</code>。如果欺诈反馈晚七天，当下不能使用最近七天的真实标签。代码先分别计算 <code>(t-7天,t]</code> 的短窗口，以及 <code>(t-(7+w)天,t]</code> 的长窗口，再用长减短，留下 <code>(t-7-w天,t-7天]</code> 的可见区域。</p>
+<p>用人为设置的窗口计数演示 <code>w=1</code>：长八天内 20 笔、其中 3 笔欺诈；短七天内 16 笔、其中 2 笔欺诈。相减得可见一天 4 笔、1 笔欺诈，风险值 <code>1/4=0.25</code>。不是 <code>3/20</code>，也不是 <code>(3/20)-(2/16)</code>；要先减计数，再求比例。</p>
+<p><code>NB_FRAUD_DELAY</code> 和 <code>NB_TX_DELAY</code> 在三个窗口间共用，故放在循环外。循环体构造不同长窗口，得到 <code>NB_FRAUD_WINDOW</code>、<code>NB_TX_WINDOW</code>、<code>RISK_WINDOW</code>。字符串拼接 <code>feature+'_RISK_'+str(window_size)+'DAY_WINDOW'</code> 将参数值装进列名，<code>feature</code> 默认是 <code>'TERMINAL_ID'</code>；列名中的文字不代表又执行了一次数据库查询。</p>
+<p>时间索引用于滚动；最后把索引恢复成交易 ID，再执行 <code>fillna(0,inplace=True)</code>。若可见区间没有交易，风险可能出现 <code>0/0</code> 的缺失值，被填成 0。这个 0 表示此实现采用的默认数值，不证明终端客观上完全安全。而且填充作用于传入加工表的所有缺失项，不只新生成的风险列。</p>
+<p>这格只是定义。下一格真实调用时，返回表才会带新列。窗口边界、标签延迟和分组键决定了它是否符合时间因果关系，不能只因为列名写了 RISK 就当作没有泄漏。</p></div><div class="notice"><strong>需要辨清的地方</strong><ul>
+<li>同一终端内排序和正确的反馈可见性是假设前提。</li>
+<li>fillna(0) 会把未知或无历史与观测到零欺诈混在同一数值里。</li>
+</ul></div><h3>一行一行读 · 可展开符号解释</h3><div class="line-table-wrap"><table class="line-table"><thead><tr><th>原始代码 · 逐行定位</th><th>动作与状态变化</th></tr></thead><tbody><tr id="cell-27-line-1"><td class="codecell"><a class="row-label" href="#cell-27-line-1">第 1 行</a><pre><code>def get_count_risk_rolling_window(terminal_transactions, delay_period=7, windows_size_in_days=[1,7,30], feature=&quot;TERMINAL_ID&quot;):</code></pre></td><td><p class="scope">此处是函数 `get_count_risk_rolling_window` 的定义签名；默认值表达式在到达定义时求值，函数体等待以后调用</p><p>定义函数 <code>get_count_risk_rolling_window(terminal_transactions, delay_period=7, windows_size_in_days=[1, 7, 30], feature='TERMINAL_ID')</code>。冒号后缩进的代码是它的函数体。</p><p>到达此定义时求值默认参数等定义期表达式，建立函数对象并绑定名称；不会因此执行函数体。函数体说明仅在以后调用并走到相应路径时成立。</p><ul>
+<li>求值 <code>[1, 7, 30]</code>：含 3 项的列表：常量 <code>1</code>；常量 <code>7</code>；常量 <code>30</code></li>
+</ul><ul>
+<li>定义参数 <code>terminal_transactions</code>，本签名未给默认值，调用者需按参数规则提供</li>
+<li>定义参数 <code>delay_period</code> 的默认表达式 <code>7</code>；它在定义时求值一次，调用未提供该参数时才采用这个默认对象</li>
+<li>定义参数 <code>windows_size_in_days</code> 的默认表达式 <code>[1, 7, 30]</code>；它在定义时求值一次，调用未提供该参数时才采用这个默认对象</li>
+<li>定义参数 <code>feature</code> 的默认表达式 <code>'TERMINAL_ID'</code>；它在定义时求值一次，调用未提供该参数时才采用这个默认对象</li>
+</ul><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li>函数定义签名中的 <code>参数名=表达式</code> 指定默认值；默认表达式在定义时求值，不能当成一次实际传参或函数体赋值。</li>
+<li>方括号可能创建列表，也可能是已有对象的索引/切片。<code>表[列名]</code>、<code>表[条件]</code> 与 <code>[值1,值2]</code> 的用途不同。</li>
+<li>def 后的外层圆括号列出定义参数，不是调用；其中默认表达式若含另一个函数调用，它仍在定义时求值。</li>
+<li>冒号在语句末尾引出缩进块，在方括号内可表示切片，在字典内分隔键和值。</li>
+<li>逗号分隔参数、元素或解包目标，项目的先后顺序可能决定字段或维度对应。</li>
+<li><code>delay_period</code>：反馈延迟天数</li>
+<li><code>windows_size_in_days</code>：需要分别计算的多个窗口天数</li>
+</ul></details></td></tr><tr id="cell-27-line-3"><td class="codecell"><a class="row-label" href="#cell-27-line-3">第 3 行</a><pre><code>    terminal_transactions=terminal_transactions.sort_values(&#x27;TX_DATETIME&#x27;)</code></pre></td><td><p class="scope">仅在调用 `get_count_risk_rolling_window` 并执行到本行时发生；仅执行 def 不执行这段函数体</p><p>先计算右侧：按给定列排序；默认返回排序结果，只有明确 inplace 才原地修改。传入：位置参数1是 <code>'TX_DATETIME'</code>。</p><p>把结果绑定到 <code>terminal_transactions</code>。名称原来的引用被替换；若右侧只是另一个对象变量，这通常是共享引用，不是自动复制。</p><ul>
+<li>求值 <code>terminal_transactions.sort_values('TX_DATETIME')</code>：按给定列排序；默认返回排序结果，只有明确 inplace 才原地修改。传入：位置参数1是 <code>'TX_DATETIME'</code></li>
+</ul><ul>
+<li>调用 <code>terminal_transactions.sort_values</code> 时的位置参数1：<code>'TX_DATETIME'</code>；先求出该表达式再传入</li>
+</ul><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li><code>=</code> 在赋值位置把右侧结果交给左侧；在调用的 <code>参数名=值</code> 中则指定参数，不是在比较。</li>
+<li>点号从左侧对象或模块中取属性/方法；后接 <code>(...)</code> 才是在调用可调用成员。</li>
+<li>圆括号在可调用表达式后可表示调用，也可用于运算分组、元组或类的基类声明；应结合当前语句。</li>
+<li>行首缩进说明它处于某个函数、循环、分支或括号续行中；不要仅看视觉对齐就判断执行次数。</li>
+</ul></details></td></tr><tr id="cell-27-line-5"><td class="codecell"><a class="row-label" href="#cell-27-line-5">第 5 行</a><pre><code>    terminal_transactions.index=terminal_transactions.TX_DATETIME</code></pre></td><td><p class="scope">仅在调用 `get_count_risk_rolling_window` 并执行到本行时发生；仅执行 def 不执行这段函数体</p><p>先计算右侧：访问 <code>terminal_transactions</code> 的 <code>TX_DATETIME</code> 属性或成员。</p><p>把结果保存到 <code>terminal_transactions.index</code> 指定的对象属性；这会改变该对象的状态。</p><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li><code>=</code> 在赋值位置把右侧结果交给左侧；在调用的 <code>参数名=值</code> 中则指定参数，不是在比较。</li>
+<li>点号从左侧对象或模块中取属性/方法；后接 <code>(...)</code> 才是在调用可调用成员。</li>
+<li>行首缩进说明它处于某个函数、循环、分支或括号续行中；不要仅看视觉对齐就判断执行次数。</li>
+<li><code>TX_DATETIME</code>：交易发生的日期时间</li>
+</ul></details></td></tr><tr id="cell-27-line-7"><td class="codecell"><a class="row-label" href="#cell-27-line-7">第 7 行</a><pre><code>    NB_FRAUD_DELAY=terminal_transactions[&#x27;TX_FRAUD&#x27;].rolling(str(delay_period)+&#x27;d&#x27;).sum()</code></pre></td><td><p class="scope">仅在调用 `get_count_risk_rolling_window` 并执行到本行时发生；仅执行 def 不执行这段函数体</p><p>先计算右侧：对指定数据或窗口求和；0/1标签求和可统计欺诈笔数。这里没有显式传入参数。</p><p>把结果绑定到 <code>NB_FRAUD_DELAY</code>。名称原来的引用被替换；若右侧只是另一个对象变量，这通常是共享引用，不是自动复制。</p><ul>
+<li>求值 <code>terminal_transactions['TX_FRAUD']</code>：从 <code>terminal_transactions</code> 中按 <code>'TX_FRAUD'</code> 取值；字符串常指列或字典键，布尔序列常用于筛选，整数的含义取决于对象的索引规则</li>
+<li>求值 <code>str(delay_period)</code>：按 <code>str</code> 对输入进行构造或类型转换。传入：位置参数1是 <code>delay_period</code></li>
+<li>求值 <code>str(delay_period) + 'd'</code>：先计算 <code>str(delay_period)</code> 与 <code>'d'</code>；数值的 + 是相加，列表或字符串的 + 是按顺序拼接，数组/Series则按各自对齐规则计算</li>
+<li>求值 <code>terminal_transactions['TX_FRAUD'].rolling(str(delay_period) + 'd')</code>：建立滚动窗口视图，窗口按行数还是时间取决于参数；后面的 sum/count 等才计算值。传入：位置参数1是 <code>str(delay_period) + 'd'</code></li>
+<li>求值 <code>terminal_transactions['TX_FRAUD'].rolling(str(delay_period) + 'd').sum()</code>：对指定数据或窗口求和；0/1标签求和可统计欺诈笔数。这里没有显式传入参数</li>
+</ul><ul>
+<li>调用 <code>terminal_transactions['TX_FRAUD'].rolling</code> 时的位置参数1：<code>str(delay_period) + 'd'</code>；先求出该表达式再传入</li>
+<li>调用 <code>str</code> 时的位置参数1：<code>delay_period</code>；先求出该表达式再传入</li>
+</ul><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li><code>=</code> 在赋值位置把右侧结果交给左侧；在调用的 <code>参数名=值</code> 中则指定参数，不是在比较。</li>
+<li>点号从左侧对象或模块中取属性/方法；后接 <code>(...)</code> 才是在调用可调用成员。</li>
+<li>方括号可能创建列表，也可能是已有对象的索引/切片。<code>表[列名]</code>、<code>表[条件]</code> 与 <code>[值1,值2]</code> 的用途不同。</li>
+<li>圆括号在可调用表达式后可表示调用，也可用于运算分组、元组或类的基类声明；应结合当前语句。</li>
+<li>行首缩进说明它处于某个函数、循环、分支或括号续行中；不要仅看视觉对齐就判断执行次数。</li>
+<li><code>delay_period</code>：反馈延迟天数</li>
+</ul></details></td></tr><tr id="cell-27-line-8"><td class="codecell"><a class="row-label" href="#cell-27-line-8">第 8 行</a><pre><code>    NB_TX_DELAY=terminal_transactions[&#x27;TX_FRAUD&#x27;].rolling(str(delay_period)+&#x27;d&#x27;).count()</code></pre></td><td><p class="scope">仅在调用 `get_count_risk_rolling_window` 并执行到本行时发生；仅执行 def 不执行这段函数体</p><p>先计算右侧：统计非缺失记录数量；不要自动等同包含缺失的所有行数。这里没有显式传入参数。</p><p>把结果绑定到 <code>NB_TX_DELAY</code>。名称原来的引用被替换；若右侧只是另一个对象变量，这通常是共享引用，不是自动复制。</p><ul>
+<li>求值 <code>terminal_transactions['TX_FRAUD']</code>：从 <code>terminal_transactions</code> 中按 <code>'TX_FRAUD'</code> 取值；字符串常指列或字典键，布尔序列常用于筛选，整数的含义取决于对象的索引规则</li>
+<li>求值 <code>str(delay_period)</code>：按 <code>str</code> 对输入进行构造或类型转换。传入：位置参数1是 <code>delay_period</code></li>
+<li>求值 <code>str(delay_period) + 'd'</code>：先计算 <code>str(delay_period)</code> 与 <code>'d'</code>；数值的 + 是相加，列表或字符串的 + 是按顺序拼接，数组/Series则按各自对齐规则计算</li>
+<li>求值 <code>terminal_transactions['TX_FRAUD'].rolling(str(delay_period) + 'd')</code>：建立滚动窗口视图，窗口按行数还是时间取决于参数；后面的 sum/count 等才计算值。传入：位置参数1是 <code>str(delay_period) + 'd'</code></li>
+<li>求值 <code>terminal_transactions['TX_FRAUD'].rolling(str(delay_period) + 'd').count()</code>：统计非缺失记录数量；不要自动等同包含缺失的所有行数。这里没有显式传入参数</li>
+</ul><ul>
+<li>调用 <code>terminal_transactions['TX_FRAUD'].rolling</code> 时的位置参数1：<code>str(delay_period) + 'd'</code>；先求出该表达式再传入</li>
+<li>调用 <code>str</code> 时的位置参数1：<code>delay_period</code>；先求出该表达式再传入</li>
+</ul><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li><code>=</code> 在赋值位置把右侧结果交给左侧；在调用的 <code>参数名=值</code> 中则指定参数，不是在比较。</li>
+<li>点号从左侧对象或模块中取属性/方法；后接 <code>(...)</code> 才是在调用可调用成员。</li>
+<li>方括号可能创建列表，也可能是已有对象的索引/切片。<code>表[列名]</code>、<code>表[条件]</code> 与 <code>[值1,值2]</code> 的用途不同。</li>
+<li>圆括号在可调用表达式后可表示调用，也可用于运算分组、元组或类的基类声明；应结合当前语句。</li>
+<li>行首缩进说明它处于某个函数、循环、分支或括号续行中；不要仅看视觉对齐就判断执行次数。</li>
+<li><code>delay_period</code>：反馈延迟天数</li>
+</ul></details></td></tr><tr id="cell-27-line-10"><td class="codecell"><a class="row-label" href="#cell-27-line-10">第 10 行</a><pre><code>    for window_size in windows_size_in_days:</code></pre></td><td><p class="scope">仅在调用 `get_count_risk_rolling_window` 并执行到本行时发生；仅执行 def 不执行这段函数体</p><p>遍历 <code>windows_size_in_days</code>，每次把取出的项交给 <code>window_size</code>。</p><p>对每项执行缩进体；循环变量通常被下一项覆盖，累计结果需另放列表、表格或计数器。空可迭代对象不会执行循环体。</p><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li>冒号在语句末尾引出缩进块，在方括号内可表示切片，在字典内分隔键和值。</li>
+<li>行首缩进说明它处于某个函数、循环、分支或括号续行中；不要仅看视觉对齐就判断执行次数。</li>
+<li><code>window_size</code>：本轮滚动窗口长度</li>
+<li><code>windows_size_in_days</code>：需要分别计算的多个窗口天数</li>
+</ul></details></td></tr><tr id="cell-27-line-12"><td class="codecell"><a class="row-label" href="#cell-27-line-12">第 12 行</a><pre><code>        NB_FRAUD_DELAY_WINDOW=terminal_transactions[&#x27;TX_FRAUD&#x27;].rolling(str(delay_period+window_size)+&#x27;d&#x27;).sum()</code></pre></td><td><p class="scope">仅在调用 `get_count_risk_rolling_window` 并执行到本行时发生；仅执行 def 不执行这段函数体；属于循环体，仅在本轮从 `windows_size_in_days` 取得一项赋给 `window_size`后走到本行时执行</p><p>先计算右侧：对指定数据或窗口求和；0/1标签求和可统计欺诈笔数。这里没有显式传入参数。</p><p>把结果绑定到 <code>NB_FRAUD_DELAY_WINDOW</code>。名称原来的引用被替换；若右侧只是另一个对象变量，这通常是共享引用，不是自动复制。</p><ul>
+<li>求值 <code>terminal_transactions['TX_FRAUD']</code>：从 <code>terminal_transactions</code> 中按 <code>'TX_FRAUD'</code> 取值；字符串常指列或字典键，布尔序列常用于筛选，整数的含义取决于对象的索引规则</li>
+<li>求值 <code>delay_period + window_size</code>：先计算 <code>delay_period</code> 与 <code>window_size</code>；数值的 + 是相加，列表或字符串的 + 是按顺序拼接，数组/Series则按各自对齐规则计算</li>
+<li>求值 <code>str(delay_period + window_size)</code>：按 <code>str</code> 对输入进行构造或类型转换。传入：位置参数1是 <code>delay_period + window_size</code></li>
+<li>求值 <code>str(delay_period + window_size) + 'd'</code>：先计算 <code>str(delay_period + window_size)</code> 与 <code>'d'</code>；数值的 + 是相加，列表或字符串的 + 是按顺序拼接，数组/Series则按各自对齐规则计算</li>
+<li>求值 <code>terminal_transactions['TX_FRAUD'].rolling(str(delay_period + window_size) + 'd')</code>：建立滚动窗口视图，窗口按行数还是时间取决于参数；后面的 sum/count 等才计算值。传入：位置参数1是 <code>str(delay_period + window_size) + 'd'</code></li>
+<li>求值 <code>terminal_transactions['TX_FRAUD'].rolling(str(delay_period + window_size) + 'd').sum()</code>：对指定数据或窗口求和；0/1标签求和可统计欺诈笔数。这里没有显式传入参数</li>
+</ul><ul>
+<li>调用 <code>terminal_transactions['TX_FRAUD'].rolling</code> 时的位置参数1：<code>str(delay_period + window_size) + 'd'</code>；先求出该表达式再传入</li>
+<li>调用 <code>str</code> 时的位置参数1：<code>delay_period + window_size</code>；先求出该表达式再传入</li>
+</ul><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li><code>=</code> 在赋值位置把右侧结果交给左侧；在调用的 <code>参数名=值</code> 中则指定参数，不是在比较。</li>
+<li>点号从左侧对象或模块中取属性/方法；后接 <code>(...)</code> 才是在调用可调用成员。</li>
+<li>方括号可能创建列表，也可能是已有对象的索引/切片。<code>表[列名]</code>、<code>表[条件]</code> 与 <code>[值1,值2]</code> 的用途不同。</li>
+<li>圆括号在可调用表达式后可表示调用，也可用于运算分组、元组或类的基类声明；应结合当前语句。</li>
+<li>行首缩进说明它处于某个函数、循环、分支或括号续行中；不要仅看视觉对齐就判断执行次数。</li>
+<li><code>delay_period</code>：反馈延迟天数</li>
+<li><code>window_size</code>：本轮滚动窗口长度</li>
+</ul></details></td></tr><tr id="cell-27-line-13"><td class="codecell"><a class="row-label" href="#cell-27-line-13">第 13 行</a><pre><code>        NB_TX_DELAY_WINDOW=terminal_transactions[&#x27;TX_FRAUD&#x27;].rolling(str(delay_period+window_size)+&#x27;d&#x27;).count()</code></pre></td><td><p class="scope">仅在调用 `get_count_risk_rolling_window` 并执行到本行时发生；仅执行 def 不执行这段函数体；属于循环体，仅在本轮从 `windows_size_in_days` 取得一项赋给 `window_size`后走到本行时执行</p><p>先计算右侧：统计非缺失记录数量；不要自动等同包含缺失的所有行数。这里没有显式传入参数。</p><p>把结果绑定到 <code>NB_TX_DELAY_WINDOW</code>。名称原来的引用被替换；若右侧只是另一个对象变量，这通常是共享引用，不是自动复制。</p><ul>
+<li>求值 <code>terminal_transactions['TX_FRAUD']</code>：从 <code>terminal_transactions</code> 中按 <code>'TX_FRAUD'</code> 取值；字符串常指列或字典键，布尔序列常用于筛选，整数的含义取决于对象的索引规则</li>
+<li>求值 <code>delay_period + window_size</code>：先计算 <code>delay_period</code> 与 <code>window_size</code>；数值的 + 是相加，列表或字符串的 + 是按顺序拼接，数组/Series则按各自对齐规则计算</li>
+<li>求值 <code>str(delay_period + window_size)</code>：按 <code>str</code> 对输入进行构造或类型转换。传入：位置参数1是 <code>delay_period + window_size</code></li>
+<li>求值 <code>str(delay_period + window_size) + 'd'</code>：先计算 <code>str(delay_period + window_size)</code> 与 <code>'d'</code>；数值的 + 是相加，列表或字符串的 + 是按顺序拼接，数组/Series则按各自对齐规则计算</li>
+<li>求值 <code>terminal_transactions['TX_FRAUD'].rolling(str(delay_period + window_size) + 'd')</code>：建立滚动窗口视图，窗口按行数还是时间取决于参数；后面的 sum/count 等才计算值。传入：位置参数1是 <code>str(delay_period + window_size) + 'd'</code></li>
+<li>求值 <code>terminal_transactions['TX_FRAUD'].rolling(str(delay_period + window_size) + 'd').count()</code>：统计非缺失记录数量；不要自动等同包含缺失的所有行数。这里没有显式传入参数</li>
+</ul><ul>
+<li>调用 <code>terminal_transactions['TX_FRAUD'].rolling</code> 时的位置参数1：<code>str(delay_period + window_size) + 'd'</code>；先求出该表达式再传入</li>
+<li>调用 <code>str</code> 时的位置参数1：<code>delay_period + window_size</code>；先求出该表达式再传入</li>
+</ul><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li><code>=</code> 在赋值位置把右侧结果交给左侧；在调用的 <code>参数名=值</code> 中则指定参数，不是在比较。</li>
+<li>点号从左侧对象或模块中取属性/方法；后接 <code>(...)</code> 才是在调用可调用成员。</li>
+<li>方括号可能创建列表，也可能是已有对象的索引/切片。<code>表[列名]</code>、<code>表[条件]</code> 与 <code>[值1,值2]</code> 的用途不同。</li>
+<li>圆括号在可调用表达式后可表示调用，也可用于运算分组、元组或类的基类声明；应结合当前语句。</li>
+<li>行首缩进说明它处于某个函数、循环、分支或括号续行中；不要仅看视觉对齐就判断执行次数。</li>
+<li><code>delay_period</code>：反馈延迟天数</li>
+<li><code>window_size</code>：本轮滚动窗口长度</li>
+</ul></details></td></tr><tr id="cell-27-line-15"><td class="codecell"><a class="row-label" href="#cell-27-line-15">第 15 行</a><pre><code>        NB_FRAUD_WINDOW=NB_FRAUD_DELAY_WINDOW-NB_FRAUD_DELAY</code></pre></td><td><p class="scope">仅在调用 `get_count_risk_rolling_window` 并执行到本行时发生；仅执行 def 不执行这段函数体；属于循环体，仅在本轮从 `windows_size_in_days` 取得一项赋给 `window_size`后走到本行时执行</p><p>先计算右侧：先取得 变量 <code>NB_FRAUD_DELAY_WINDOW</code> 当前引用的值，再与 变量 <code>NB_FRAUD_DELAY</code> 当前引用的值 做“减”；数组或Series时通常逐元素计算，形状或索引须兼容。</p><p>把结果绑定到 <code>NB_FRAUD_WINDOW</code>。名称原来的引用被替换；若右侧只是另一个对象变量，这通常是共享引用，不是自动复制。</p><ul>
+<li>求值 <code>NB_FRAUD_DELAY_WINDOW - NB_FRAUD_DELAY</code>：先取得 变量 <code>NB_FRAUD_DELAY_WINDOW</code> 当前引用的值，再与 变量 <code>NB_FRAUD_DELAY</code> 当前引用的值 做“减”；数组或Series时通常逐元素计算，形状或索引须兼容</li>
+</ul><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li><code>=</code> 在赋值位置把右侧结果交给左侧；在调用的 <code>参数名=值</code> 中则指定参数，不是在比较。</li>
+<li>行首缩进说明它处于某个函数、循环、分支或括号续行中；不要仅看视觉对齐就判断执行次数。</li>
+</ul></details></td></tr><tr id="cell-27-line-16"><td class="codecell"><a class="row-label" href="#cell-27-line-16">第 16 行</a><pre><code>        NB_TX_WINDOW=NB_TX_DELAY_WINDOW-NB_TX_DELAY</code></pre></td><td><p class="scope">仅在调用 `get_count_risk_rolling_window` 并执行到本行时发生；仅执行 def 不执行这段函数体；属于循环体，仅在本轮从 `windows_size_in_days` 取得一项赋给 `window_size`后走到本行时执行</p><p>先计算右侧：先取得 变量 <code>NB_TX_DELAY_WINDOW</code> 当前引用的值，再与 变量 <code>NB_TX_DELAY</code> 当前引用的值 做“减”；数组或Series时通常逐元素计算，形状或索引须兼容。</p><p>把结果绑定到 <code>NB_TX_WINDOW</code>。名称原来的引用被替换；若右侧只是另一个对象变量，这通常是共享引用，不是自动复制。</p><ul>
+<li>求值 <code>NB_TX_DELAY_WINDOW - NB_TX_DELAY</code>：先取得 变量 <code>NB_TX_DELAY_WINDOW</code> 当前引用的值，再与 变量 <code>NB_TX_DELAY</code> 当前引用的值 做“减”；数组或Series时通常逐元素计算，形状或索引须兼容</li>
+</ul><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li><code>=</code> 在赋值位置把右侧结果交给左侧；在调用的 <code>参数名=值</code> 中则指定参数，不是在比较。</li>
+<li>行首缩进说明它处于某个函数、循环、分支或括号续行中；不要仅看视觉对齐就判断执行次数。</li>
+</ul></details></td></tr><tr id="cell-27-line-18"><td class="codecell"><a class="row-label" href="#cell-27-line-18">第 18 行</a><pre><code>        RISK_WINDOW=NB_FRAUD_WINDOW/NB_TX_WINDOW</code></pre></td><td><p class="scope">仅在调用 `get_count_risk_rolling_window` 并执行到本行时发生；仅执行 def 不执行这段函数体；属于循环体，仅在本轮从 `windows_size_in_days` 取得一项赋给 `window_size`后走到本行时执行</p><p>先计算右侧：先取得 变量 <code>NB_FRAUD_WINDOW</code> 当前引用的值，再与 变量 <code>NB_TX_WINDOW</code> 当前引用的值 做“除以”；数组或Series时通常逐元素计算，形状或索引须兼容。</p><p>把结果绑定到 <code>RISK_WINDOW</code>。名称原来的引用被替换；若右侧只是另一个对象变量，这通常是共享引用，不是自动复制。</p><ul>
+<li>求值 <code>NB_FRAUD_WINDOW / NB_TX_WINDOW</code>：先取得 变量 <code>NB_FRAUD_WINDOW</code> 当前引用的值，再与 变量 <code>NB_TX_WINDOW</code> 当前引用的值 做“除以”；数组或Series时通常逐元素计算，形状或索引须兼容</li>
+</ul><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li><code>=</code> 在赋值位置把右侧结果交给左侧；在调用的 <code>参数名=值</code> 中则指定参数，不是在比较。</li>
+<li>行首缩进说明它处于某个函数、循环、分支或括号续行中；不要仅看视觉对齐就判断执行次数。</li>
+</ul></details></td></tr><tr id="cell-27-line-20"><td class="codecell"><a class="row-label" href="#cell-27-line-20">第 20 行</a><pre><code>        terminal_transactions[feature+&#x27;_NB_TX_&#x27;+str(window_size)+&#x27;DAY_WINDOW&#x27;]=list(NB_TX_WINDOW)</code></pre></td><td><p class="scope">仅在调用 `get_count_risk_rolling_window` 并执行到本行时发生；仅执行 def 不执行这段函数体；属于循环体，仅在本轮从 `windows_size_in_days` 取得一项赋给 `window_size`后走到本行时执行</p><p>先计算右侧：按 <code>list</code> 对输入进行构造或类型转换。传入：位置参数1是 <code>NB_TX_WINDOW</code>。</p><p>再把结果写到 <code>terminal_transactions[feature + '_NB_TX_' + str(window_size) + 'DAY_WINDOW']</code> 指定的位置或列；若是DataFrame列赋值，需要检查行数、索引对齐和是否覆盖已有列。</p><ul>
+<li>求值 <code>list(NB_TX_WINDOW)</code>：按 <code>list</code> 对输入进行构造或类型转换。传入：位置参数1是 <code>NB_TX_WINDOW</code></li>
+</ul><ul>
+<li>调用 <code>list</code> 时的位置参数1：<code>NB_TX_WINDOW</code>；先求出该表达式再传入</li>
+<li>调用 <code>str</code> 时的位置参数1：<code>window_size</code>；先求出该表达式再传入</li>
+</ul><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li><code>=</code> 在赋值位置把右侧结果交给左侧；在调用的 <code>参数名=值</code> 中则指定参数，不是在比较。</li>
+<li>方括号可能创建列表，也可能是已有对象的索引/切片。<code>表[列名]</code>、<code>表[条件]</code> 与 <code>[值1,值2]</code> 的用途不同。</li>
+<li>圆括号在可调用表达式后可表示调用，也可用于运算分组、元组或类的基类声明；应结合当前语句。</li>
+<li>行首缩进说明它处于某个函数、循环、分支或括号续行中；不要仅看视觉对齐就判断执行次数。</li>
+<li><code>window_size</code>：本轮滚动窗口长度</li>
+</ul></details></td></tr><tr id="cell-27-line-21"><td class="codecell"><a class="row-label" href="#cell-27-line-21">第 21 行</a><pre><code>        terminal_transactions[feature+&#x27;_RISK_&#x27;+str(window_size)+&#x27;DAY_WINDOW&#x27;]=list(RISK_WINDOW)</code></pre></td><td><p class="scope">仅在调用 `get_count_risk_rolling_window` 并执行到本行时发生；仅执行 def 不执行这段函数体；属于循环体，仅在本轮从 `windows_size_in_days` 取得一项赋给 `window_size`后走到本行时执行</p><p>先计算右侧：按 <code>list</code> 对输入进行构造或类型转换。传入：位置参数1是 <code>RISK_WINDOW</code>。</p><p>再把结果写到 <code>terminal_transactions[feature + '_RISK_' + str(window_size) + 'DAY_WINDOW']</code> 指定的位置或列；若是DataFrame列赋值，需要检查行数、索引对齐和是否覆盖已有列。</p><ul>
+<li>求值 <code>list(RISK_WINDOW)</code>：按 <code>list</code> 对输入进行构造或类型转换。传入：位置参数1是 <code>RISK_WINDOW</code></li>
+</ul><ul>
+<li>调用 <code>list</code> 时的位置参数1：<code>RISK_WINDOW</code>；先求出该表达式再传入</li>
+<li>调用 <code>str</code> 时的位置参数1：<code>window_size</code>；先求出该表达式再传入</li>
+</ul><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li><code>=</code> 在赋值位置把右侧结果交给左侧；在调用的 <code>参数名=值</code> 中则指定参数，不是在比较。</li>
+<li>方括号可能创建列表，也可能是已有对象的索引/切片。<code>表[列名]</code>、<code>表[条件]</code> 与 <code>[值1,值2]</code> 的用途不同。</li>
+<li>圆括号在可调用表达式后可表示调用，也可用于运算分组、元组或类的基类声明；应结合当前语句。</li>
+<li>行首缩进说明它处于某个函数、循环、分支或括号续行中；不要仅看视觉对齐就判断执行次数。</li>
+<li><code>window_size</code>：本轮滚动窗口长度</li>
+</ul></details></td></tr><tr id="cell-27-line-23"><td class="codecell"><a class="row-label" href="#cell-27-line-23">第 23 行</a><pre><code>    terminal_transactions.index=terminal_transactions.TRANSACTION_ID</code></pre></td><td><p class="scope">仅在调用 `get_count_risk_rolling_window` 并执行到本行时发生；仅执行 def 不执行这段函数体</p><p>先计算右侧：访问 <code>terminal_transactions</code> 的 <code>TRANSACTION_ID</code> 属性或成员。</p><p>把结果保存到 <code>terminal_transactions.index</code> 指定的对象属性；这会改变该对象的状态。</p><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li><code>=</code> 在赋值位置把右侧结果交给左侧；在调用的 <code>参数名=值</code> 中则指定参数，不是在比较。</li>
+<li>点号从左侧对象或模块中取属性/方法；后接 <code>(...)</code> 才是在调用可调用成员。</li>
+<li>行首缩进说明它处于某个函数、循环、分支或括号续行中；不要仅看视觉对齐就判断执行次数。</li>
+<li><code>TRANSACTION_ID</code>：交易标识</li>
+</ul></details></td></tr><tr id="cell-27-line-25"><td class="codecell"><a class="row-label" href="#cell-27-line-25">第 25 行</a><pre><code>    # Replace NA values with 0 (all undefined risk scores where NB_TX_WINDOW is 0) </code></pre></td><td><p class="scope">本行是注释，不执行。所在上下文：仅在调用 `get_count_risk_rolling_window` 并执行到本行时发生；仅执行 def 不执行这段函数体</p><p>原作者的说明性注释：Replace NA values with 0 (all undefined risk scores where NB_TX_WINDOW is 0)</p><p>该行不执行赋值、计算或训练。注释与实际实现不一致时，需按代码核对。</p><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li>本行 <code>#</code> 注释供人阅读，不参与运算；字符串内部的 # 不是注释标记。</li>
+<li>行首缩进说明它处于某个函数、循环、分支或括号续行中；不要仅看视觉对齐就判断执行次数。</li>
+</ul></details></td></tr><tr id="cell-27-line-26"><td class="codecell"><a class="row-label" href="#cell-27-line-26">第 26 行</a><pre><code>    terminal_transactions.fillna(0,inplace=True)</code></pre></td><td><p class="scope">仅在调用 `get_count_risk_rolling_window` 并执行到本行时发生；仅执行 def 不执行这段函数体</p><p>按参数填补缺失值；inplace=True 会改变接收对象，返回值不可当成新表。传入：位置参数1是 <code>0</code>；<code>inplace=True</code> 是具名参数。</p><p>本行没有用等号把返回值另存到名称。若是对象方法可能有副作用；若是单元格最后一个表达式，Jupyter通常会显示其返回结果。</p><ul>
+<li>求值 <code>terminal_transactions.fillna(0, inplace=True)</code>：按参数填补缺失值；inplace=True 会改变接收对象，返回值不可当成新表。传入：位置参数1是 <code>0</code>；<code>inplace=True</code> 是具名参数</li>
+</ul><ul>
+<li>调用 <code>terminal_transactions.fillna</code> 时的位置参数1：<code>0</code>；先求出该表达式再传入</li>
+<li>调用 <code>terminal_transactions.fillna</code> 时的具名参数 <code>inplace</code> 接收 <code>True</code></li>
+</ul><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li><code>=</code> 在赋值位置把右侧结果交给左侧；在调用的 <code>参数名=值</code> 中则指定参数，不是在比较。</li>
+<li>点号从左侧对象或模块中取属性/方法；后接 <code>(...)</code> 才是在调用可调用成员。</li>
+<li>圆括号在可调用表达式后可表示调用，也可用于运算分组、元组或类的基类声明；应结合当前语句。</li>
+<li>逗号分隔参数、元素或解包目标，项目的先后顺序可能决定字段或维度对应。</li>
+<li>行首缩进说明它处于某个函数、循环、分支或括号续行中；不要仅看视觉对齐就判断执行次数。</li>
+</ul></details></td></tr><tr id="cell-27-line-28"><td class="codecell"><a class="row-label" href="#cell-27-line-28">第 28 行</a><pre><code>    return terminal_transactions</code></pre></td><td><p class="scope">仅在调用 `get_count_risk_rolling_window` 并执行到本行时发生；仅执行 def 不执行这段函数体</p><p>计算要返回的内容：变量 <code>terminal_transactions</code> 当前引用的值。</p><p>立即结束本次函数调用，把这个结果交回调用处；这次函数调用中后面的语句不再执行。返回表不等于自动写入磁盘。</p><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li>行首缩进说明它处于某个函数、循环、分支或括号续行中；不要仅看视觉对齐就判断执行次数。</li>
+</ul></details></td></tr></tbody></table></div><details class="historical"><summary>原书保存的历史输出 · 本次未运行</summary><p class="muted">以下内容原本就在 Notebook 文件中；其中的数字、图、警告与耗时不代表你当前电脑的运行结果。</p><p class="muted">原文件没有为本格保存输出。这里不填造运行结果。</p></details><div class="cell-nav"><a href="#cell-24">← 上一格代码</a><a href="#cell-28">下一格代码 →</a></div></article><article class="cell" id="cell-28" data-cell="28"><div class="tag">原单元格 28 · 1 行 · 专项补注 + 逐行语法</div><h2 class="cell-title">transactions_df[transactions_df.TX_FRAUD==1]</h2><p><strong>这格解决什么：</strong> 显示真实标签为 1 的交易。</p><div class="states"><div class="state"><strong>执行前</strong><p>全表包含 TX_FRAUD。</p></div><div class="state"><strong>执行后</strong><p>产生欺诈行子表供阅读，未改变 transactions_df 的行集合。</p></div></div><h3>原代码 · 保持原样</h3><pre class="source"><span class="sr-only">原始代码，行号仅供定位。</span><span class="code-line"><span class="line-no">001</span><code>transactions_df[transactions_df.TX_FRAUD==1]</code></span></pre><div class="walkthrough"><h3>顺着代码看数据怎样变化</h3><p>先得到 <code>TX_FRAUD==1</code> 的布尔序列，再筛选整表。这个动作是在已经有标签的教学数据里查看案例，不是模型作出了“欺诈”预测。看原书历史输出时，应将标签列和以后生成的预测分数分开：标签是事后真值，分数是模型根据输入特征给出的判断。</p></div><h3>一行一行读 · 可展开符号解释</h3><div class="line-table-wrap"><table class="line-table"><thead><tr><th>原始代码 · 逐行定位</th><th>动作与状态变化</th></tr></thead><tbody><tr id="cell-28-line-1"><td class="codecell"><a class="row-label" href="#cell-28-line-1">第 1 行</a><pre><code>transactions_df[transactions_df.TX_FRAUD==1]</code></pre></td><td><p class="scope">处于单元格顶层；真正执行本cell并到达此语句时才发生，静态精读本身不执行代码</p><p>从 <code>transactions_df</code> 中按 <code>transactions_df.TX_FRAUD == 1</code> 取值；字符串常指列或字典键，布尔序列常用于筛选，整数的含义取决于对象的索引规则。</p><p>本行没有用等号把返回值另存到名称。若是对象方法可能有副作用；若是单元格最后一个表达式，Jupyter通常会显示其返回结果。</p><ul>
+<li>求值 <code>transactions_df.TX_FRAUD == 1</code>：判断<code>transactions_df.TX_FRAUD</code> 是否等于 <code>1</code>；标量比较通常给一个布尔值，数组或Series比较通常逐项给布尔值</li>
+<li>求值 <code>transactions_df[transactions_df.TX_FRAUD == 1]</code>：从 <code>transactions_df</code> 中按 <code>transactions_df.TX_FRAUD == 1</code> 取值；字符串常指列或字典键，布尔序列常用于筛选，整数的含义取决于对象的索引规则</li>
+</ul><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li>比较符生成判断结果；<code>==</code> 比较值是否相等，<code>=</code> 用于赋值或具名参数。</li>
+<li>点号从左侧对象或模块中取属性/方法；后接 <code>(...)</code> 才是在调用可调用成员。</li>
+<li>方括号可能创建列表，也可能是已有对象的索引/切片。<code>表[列名]</code>、<code>表[条件]</code> 与 <code>[值1,值2]</code> 的用途不同。</li>
+<li><code>TX_FRAUD</code>：0/1 欺诈标签，属于监督目标或事后评估信息</li>
+<li><code>transactions_df</code>：交易明细 DataFrame，每行通常对应一笔交易</li>
+</ul></details></td></tr></tbody></table></div><details class="historical"><summary>原书保存的历史输出 · 本次未运行</summary><p class="muted">以下内容原本就在 Notebook 文件中；其中的数字、图、警告与耗时不代表你当前电脑的运行结果。</p><div class="historic-table"><div>
+
+<table border="1" class="dataframe">
+<thead>
+<tr>
+<th></th>
+<th>TRANSACTION_ID</th>
+<th>TX_DATETIME</th>
+<th>CUSTOMER_ID</th>
+<th>TERMINAL_ID</th>
+<th>TX_AMOUNT</th>
+<th>TX_TIME_SECONDS</th>
+<th>TX_TIME_DAYS</th>
+<th>TX_FRAUD</th>
+<th>TX_FRAUD_SCENARIO</th>
+<th>TX_DURING_WEEKEND</th>
+<th>TX_DURING_NIGHT</th>
+<th>CUSTOMER_ID_NB_TX_1DAY_WINDOW</th>
+<th>CUSTOMER_ID_AVG_AMOUNT_1DAY_WINDOW</th>
+<th>CUSTOMER_ID_NB_TX_7DAY_WINDOW</th>
+<th>CUSTOMER_ID_AVG_AMOUNT_7DAY_WINDOW</th>
+<th>CUSTOMER_ID_NB_TX_30DAY_WINDOW</th>
+<th>CUSTOMER_ID_AVG_AMOUNT_30DAY_WINDOW</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<th>3527</th>
+<td>3527</td>
+<td>2018-04-01 10:17:43</td>
+<td>3774</td>
+<td>3059</td>
+<td>225.41</td>
+<td>37063</td>
+<td>0</td>
+<td>1</td>
+<td>1</td>
+<td>1</td>
+<td>0</td>
+<td>3.0</td>
+<td>158.073333</td>
+<td>3.0</td>
+<td>158.073333</td>
+<td>3.0</td>
+<td>158.073333</td>
+</tr>
+<tr>
+<th>5789</th>
+<td>5790</td>
+<td>2018-04-01 13:31:48</td>
+<td>4944</td>
+<td>6050</td>
+<td>222.26</td>
+<td>48708</td>
+<td>0</td>
+<td>1</td>
+<td>1</td>
+<td>1</td>
+<td>0</td>
+<td>2.0</td>
+<td>127.605000</td>
+<td>2.0</td>
+<td>127.605000</td>
+<td>2.0</td>
+<td>127.605000</td>
+</tr>
+<tr>
+<th>6549</th>
+<td>6549</td>
+<td>2018-04-01 14:42:02</td>
+<td>4625</td>
+<td>9102</td>
+<td>226.40</td>
+<td>52922</td>
+<td>0</td>
+<td>1</td>
+<td>1</td>
+<td>1</td>
+<td>0</td>
+<td>4.0</td>
+<td>167.165000</td>
+<td>4.0</td>
+<td>167.165000</td>
+<td>4.0</td>
+<td>167.165000</td>
+</tr>
+<tr>
+<th>9583</th>
+<td>9583</td>
+<td>2018-04-02 01:01:05</td>
+<td>3814</td>
+<td>6893</td>
+<td>59.15</td>
+<td>90065</td>
+<td>1</td>
+<td>1</td>
+<td>3</td>
+<td>0</td>
+<td>1</td>
+<td>6.0</td>
+<td>29.138333</td>
+<td>6.0</td>
+<td>29.138333</td>
+<td>6.0</td>
+<td>29.138333</td>
+</tr>
+<tr>
+<th>10356</th>
+<td>10355</td>
+<td>2018-04-02 05:03:35</td>
+<td>2513</td>
+<td>1143</td>
+<td>222.04</td>
+<td>104615</td>
+<td>1</td>
+<td>1</td>
+<td>1</td>
+<td>0</td>
+<td>1</td>
+<td>5.0</td>
+<td>123.740000</td>
+<td>5.0</td>
+<td>123.740000</td>
+<td>5.0</td>
+<td>123.740000</td>
+</tr>
+<tr>
+<th>...</th>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+</tr>
+<tr>
+<th>1753524</th>
+<td>1753524</td>
+<td>2018-09-30 19:51:48</td>
+<td>1671</td>
+<td>3192</td>
+<td>128.60</td>
+<td>15796308</td>
+<td>182</td>
+<td>1</td>
+<td>3</td>
+<td>1</td>
+<td>0</td>
+<td>6.0</td>
+<td>138.358333</td>
+<td>25.0</td>
+<td>106.957200</td>
+<td>82.0</td>
+<td>75.621341</td>
+</tr>
+<tr>
+<th>1753600</th>
+<td>1753600</td>
+<td>2018-09-30 20:09:00</td>
+<td>4166</td>
+<td>632</td>
+<td>17.39</td>
+<td>15797340</td>
+<td>182</td>
+<td>1</td>
+<td>2</td>
+<td>1</td>
+<td>0</td>
+<td>3.0</td>
+<td>19.766667</td>
+<td>19.0</td>
+<td>15.984737</td>
+<td>86.0</td>
+<td>15.846512</td>
+</tr>
+<tr>
+<th>1753673</th>
+<td>1753673</td>
+<td>2018-09-30 20:30:52</td>
+<td>4097</td>
+<td>1558</td>
+<td>24.04</td>
+<td>15798652</td>
+<td>182</td>
+<td>1</td>
+<td>2</td>
+<td>1</td>
+<td>0</td>
+<td>3.0</td>
+<td>23.050000</td>
+<td>16.0</td>
+<td>40.440625</td>
+<td>63.0</td>
+<td>41.877460</td>
+</tr>
+<tr>
+<th>1754014</th>
+<td>1754014</td>
+<td>2018-09-30 22:27:04</td>
+<td>100</td>
+<td>8604</td>
+<td>73.85</td>
+<td>15805624</td>
+<td>182</td>
+<td>1</td>
+<td>3</td>
+<td>1</td>
+<td>0</td>
+<td>2.0</td>
+<td>48.010000</td>
+<td>26.0</td>
+<td>30.384231</td>
+<td>103.0</td>
+<td>23.627184</td>
+</tr>
+<tr>
+<th>1754017</th>
+<td>1754018</td>
+<td>2018-09-30 22:28:01</td>
+<td>4677</td>
+<td>8935</td>
+<td>45.85</td>
+<td>15805681</td>
+<td>182</td>
+<td>1</td>
+<td>2</td>
+<td>1</td>
+<td>0</td>
+<td>5.0</td>
+<td>39.078000</td>
+<td>19.0</td>
+<td>35.133684</td>
+<td>85.0</td>
+<td>37.656000</td>
+</tr>
+</tbody>
+</table>
+<p>14681 rows × 17 columns</p>
+</div></div></details><div class="cell-nav"><a href="#cell-27">← 上一格代码</a><a href="#cell-30">下一格代码 →</a></div></article><details class="original" id="original-29"><summary>原单元格 29 · 原书说明</summary><div class="original-content"><p>Let us compute these six features for the first terminal ID containing at least one fraud:</p></div></details><article class="cell" id="cell-30" data-cell="30"><div class="tag">原单元格 30 · 2 行 · 专项补注 + 逐行语法</div><h2 class="cell-title">transactions_df[transactions_df.TX_FRAUD==0].TERMINAL_ID[0]</h2><p><strong>这格解决什么：</strong> 原作者尝试查看某个终端 ID，但注释和筛选条件不一致。</p><div class="states"><div class="state"><strong>执行前</strong><p>有交易表和真实标签。</p></div><div class="state"><strong>执行后</strong><p>若索引访问成功，表达式返回一个终端编号；它不保证该编号来自欺诈交易。</p></div></div><h3>原代码 · 保持原样</h3><pre class="source"><span class="sr-only">原始代码，行号仅供定位。</span><span class="code-line"><span class="line-no">001</span><code># Get the first terminal ID that contains frauds</code></span><span class="code-line"><span class="line-no">002</span><code>transactions_df[transactions_df.TX_FRAUD==0].TERMINAL_ID[0]</code></span></pre><div class="walkthrough"><h3>顺着代码看数据怎样变化</h3><p>按代码读：<code>TX_FRAUD==0</code> 筛出正常交易，然后取它们的 <code>TERMINAL_ID</code> 列，最后 <code>[0]</code> 再索引。注释说 first terminal ID that contains frauds，实际条件却是 0，因此不能将注释照译成执行结果。</p>
+<p>再留意 Series 的 <code>[0]</code>：它在相应索引规则下可能按标签 0 取值，而非无条件取筛选后的第一项。若筛选结果没有标签 0，可能失败。若教学目的是明确取第一项，可以另外讨论 <code>.iloc[0]</code>；本页保留原始代码，不替作者偷偷修正，也不把历史输出中的编号宣称为本次验证结果。</p></div><div class="notice"><strong>需要辨清的地方</strong><ul>
+<li>TX_FRAUD==0 与原注释不一致；[0] 的索引含义也需区分。</li>
+</ul></div><h3>一行一行读 · 可展开符号解释</h3><div class="line-table-wrap"><table class="line-table"><thead><tr><th>原始代码 · 逐行定位</th><th>动作与状态变化</th></tr></thead><tbody><tr id="cell-30-line-1"><td class="codecell"><a class="row-label" href="#cell-30-line-1">第 1 行</a><pre><code># Get the first terminal ID that contains frauds</code></pre></td><td><p class="scope">本行是注释，不执行。所在上下文：处于单元格顶层；真正执行本cell并到达此语句时才发生，静态精读本身不执行代码</p><p>原作者的说明性注释：Get the first terminal ID that contains frauds</p><p>该行不执行赋值、计算或训练。注释与实际实现不一致时，需按代码核对。</p><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li>本行 <code>#</code> 注释供人阅读，不参与运算；字符串内部的 # 不是注释标记。</li>
+</ul></details></td></tr><tr id="cell-30-line-2"><td class="codecell"><a class="row-label" href="#cell-30-line-2">第 2 行</a><pre><code>transactions_df[transactions_df.TX_FRAUD==0].TERMINAL_ID[0]</code></pre></td><td><p class="scope">处于单元格顶层；真正执行本cell并到达此语句时才发生，静态精读本身不执行代码</p><p>从 <code>transactions_df[transactions_df.TX_FRAUD == 0].TERMINAL_ID</code> 中按 <code>0</code> 取值；字符串常指列或字典键，布尔序列常用于筛选，整数的含义取决于对象的索引规则。</p><p>本行没有用等号把返回值另存到名称。若是对象方法可能有副作用；若是单元格最后一个表达式，Jupyter通常会显示其返回结果。</p><ul>
+<li>求值 <code>transactions_df.TX_FRAUD == 0</code>：判断<code>transactions_df.TX_FRAUD</code> 是否等于 <code>0</code>；标量比较通常给一个布尔值，数组或Series比较通常逐项给布尔值</li>
+<li>求值 <code>transactions_df[transactions_df.TX_FRAUD == 0]</code>：从 <code>transactions_df</code> 中按 <code>transactions_df.TX_FRAUD == 0</code> 取值；字符串常指列或字典键，布尔序列常用于筛选，整数的含义取决于对象的索引规则</li>
+<li>求值 <code>transactions_df[transactions_df.TX_FRAUD == 0].TERMINAL_ID[0]</code>：从 <code>transactions_df[transactions_df.TX_FRAUD == 0].TERMINAL_ID</code> 中按 <code>0</code> 取值；字符串常指列或字典键，布尔序列常用于筛选，整数的含义取决于对象的索引规则</li>
+</ul><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li>比较符生成判断结果；<code>==</code> 比较值是否相等，<code>=</code> 用于赋值或具名参数。</li>
+<li>点号从左侧对象或模块中取属性/方法；后接 <code>(...)</code> 才是在调用可调用成员。</li>
+<li>方括号可能创建列表，也可能是已有对象的索引/切片。<code>表[列名]</code>、<code>表[条件]</code> 与 <code>[值1,值2]</code> 的用途不同。</li>
+<li><code>TERMINAL_ID</code>：终端标识</li>
+<li><code>TX_FRAUD</code>：0/1 欺诈标签，属于监督目标或事后评估信息</li>
+<li><code>transactions_df</code>：交易明细 DataFrame，每行通常对应一笔交易</li>
+</ul></details></td></tr></tbody></table></div><details class="historical"><summary>原书保存的历史输出 · 本次未运行</summary><p class="muted">以下内容原本就在 Notebook 文件中；其中的数字、图、警告与耗时不代表你当前电脑的运行结果。</p><pre class="historic-text">3156</pre></details><div class="cell-nav"><a href="#cell-28">← 上一格代码</a><a href="#cell-31">下一格代码 →</a></div></article><article class="cell" id="cell-31" data-cell="31"><div class="tag">原单元格 31 · 1 行 · 专项补注 + 逐行语法</div><h2 class="cell-title">get_count_risk_rolling_window(transactions_df[transactions_df.TERMINAL_ID==3…</h2><p><strong>这格解决什么：</strong> 在终端 3059 的交易上试算风险窗口。</p><div class="states"><div class="state"><strong>执行前</strong><p>终端函数已定义，原表应含该终端的记录。</p></div><div class="state"><strong>执行后</strong><p>返回这个终端的交易子表及六个新列，供单个案例检查。</p></div></div><h3>原代码 · 保持原样</h3><pre class="source"><span class="sr-only">原始代码，行号仅供定位。</span><span class="code-line"><span class="line-no">001</span><code>get_count_risk_rolling_window(transactions_df[transactions_df.TERMINAL_ID==3059], delay_period=7, windows_size_in_days=[1,7,30])</code></span></pre><div class="walkthrough"><h3>顺着代码看数据怎样变化</h3><p><code>TERMINAL_ID==3059</code> 只是教材选定的一个例子，不是筛选最高风险终端。<code>delay_period=7</code> 明确给标签等待期；<code>windows_size_in_days=[1,7,30]</code> 指等待期之前分别看多长的历史。</p>
+<p>审阅一行时同时读时间、笔数窗口和风险窗口。例如人工示意 NB_TX=4、RISK=0.25 可解释为该可见区间内四笔中一笔标为欺诈；如果风险为 0 且笔数为 0，则是没有历史和填充值的情况，含义不同。应先在单终端试算里理解差别，再读下一格的全体分组。</p></div><div class="dependencies"><strong>追踪被调用的教材函数</strong><p><a href="02-BaselineFeatureTransformation.html#cell-27"><code>get_count_risk_rolling_window</code> → 原单元格 27</a></p><small>链接优先当前笔记本的前置定义，其次公共函数。原环境若由外部脚本覆盖同名函数，还需核对实际绑定。</small></div><h3>一行一行读 · 可展开符号解释</h3><div class="line-table-wrap"><table class="line-table"><thead><tr><th>原始代码 · 逐行定位</th><th>动作与状态变化</th></tr></thead><tbody><tr id="cell-31-line-1"><td class="codecell"><a class="row-label" href="#cell-31-line-1">第 1 行</a><pre><code>get_count_risk_rolling_window(transactions_df[transactions_df.TERMINAL_ID==3059], delay_period=7, windows_size_in_days=[1,7,30])</code></pre></td><td><p class="scope">处于单元格顶层；真正执行本cell并到达此语句时才发生，静态精读本身不执行代码</p><p>调用 <code>get_count_risk_rolling_window</code>；它的返回值与副作用由此函数或类的定义决定，不能只凭名字推定数值。传入：位置参数1是 <code>transactions_df[transactions_df.TERMINAL_ID == 3059]</code>；<code>delay_period=7</code> 是具名参数；<code>windows_size_in_days=[1, 7, 30]</code> 是具名参数。</p><p>本行没有用等号把返回值另存到名称。若是对象方法可能有副作用；若是单元格最后一个表达式，Jupyter通常会显示其返回结果。</p><ul>
+<li>求值 <code>transactions_df.TERMINAL_ID == 3059</code>：判断<code>transactions_df.TERMINAL_ID</code> 是否等于 <code>3059</code>；标量比较通常给一个布尔值，数组或Series比较通常逐项给布尔值</li>
+<li>求值 <code>transactions_df[transactions_df.TERMINAL_ID == 3059]</code>：从 <code>transactions_df</code> 中按 <code>transactions_df.TERMINAL_ID == 3059</code> 取值；字符串常指列或字典键，布尔序列常用于筛选，整数的含义取决于对象的索引规则</li>
+<li>求值 <code>[1, 7, 30]</code>：含 3 项的列表：常量 <code>1</code>；常量 <code>7</code>；常量 <code>30</code></li>
+<li>求值 <code>get_count_risk_rolling_window(transactions_df[transactions_df.TERMINAL_ID == 3059], delay_period=7, windows_size_in_days=[1, 7, 30])</code>：调用 <code>get_count_risk_rolling_window</code>；它的返回值与副作用由此函数或类的定义决定，不能只凭名字推定数值。传入：位置参数1是 <code>transactions_df[transactions_df.TERMINAL_ID == 3059]</code>；<code>delay_period=7</code> 是具名参数；<code>windows_size_in_days=[1, 7, 30]</code> 是具名参数</li>
+</ul><ul>
+<li>调用 <code>get_count_risk_rolling_window</code> 时的位置参数1：<code>transactions_df[transactions_df.TERMINAL_ID == 3059]</code>；先求出该表达式再传入</li>
+<li>调用 <code>get_count_risk_rolling_window</code> 时的具名参数 <code>delay_period</code> 接收 <code>7</code></li>
+<li>调用 <code>get_count_risk_rolling_window</code> 时的具名参数 <code>windows_size_in_days</code> 接收 <code>[1, 7, 30]</code></li>
+</ul><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li><code>=</code> 在赋值位置把右侧结果交给左侧；在调用的 <code>参数名=值</code> 中则指定参数，不是在比较。</li>
+<li>比较符生成判断结果；<code>==</code> 比较值是否相等，<code>=</code> 用于赋值或具名参数。</li>
+<li>点号从左侧对象或模块中取属性/方法；后接 <code>(...)</code> 才是在调用可调用成员。</li>
+<li>方括号可能创建列表，也可能是已有对象的索引/切片。<code>表[列名]</code>、<code>表[条件]</code> 与 <code>[值1,值2]</code> 的用途不同。</li>
+<li>圆括号在可调用表达式后可表示调用，也可用于运算分组、元组或类的基类声明；应结合当前语句。</li>
+<li>逗号分隔参数、元素或解包目标，项目的先后顺序可能决定字段或维度对应。</li>
+<li><code>TERMINAL_ID</code>：终端标识</li>
+<li><code>delay_period</code>：反馈延迟天数</li>
+<li><code>transactions_df</code>：交易明细 DataFrame，每行通常对应一笔交易</li>
+<li><code>windows_size_in_days</code>：需要分别计算的多个窗口天数</li>
+</ul></details></td></tr></tbody></table></div><details class="historical"><summary>原书保存的历史输出 · 本次未运行</summary><p class="muted">以下内容原本就在 Notebook 文件中；其中的数字、图、警告与耗时不代表你当前电脑的运行结果。</p><div class="historic-table"><div>
+
+<table border="1" class="dataframe">
+<thead>
+<tr>
+<th></th>
+<th>TRANSACTION_ID</th>
+<th>TX_DATETIME</th>
+<th>CUSTOMER_ID</th>
+<th>TERMINAL_ID</th>
+<th>TX_AMOUNT</th>
+<th>TX_TIME_SECONDS</th>
+<th>TX_TIME_DAYS</th>
+<th>TX_FRAUD</th>
+<th>TX_FRAUD_SCENARIO</th>
+<th>TX_DURING_WEEKEND</th>
+<th>...</th>
+<th>CUSTOMER_ID_NB_TX_7DAY_WINDOW</th>
+<th>CUSTOMER_ID_AVG_AMOUNT_7DAY_WINDOW</th>
+<th>CUSTOMER_ID_NB_TX_30DAY_WINDOW</th>
+<th>CUSTOMER_ID_AVG_AMOUNT_30DAY_WINDOW</th>
+<th>TERMINAL_ID_NB_TX_1DAY_WINDOW</th>
+<th>TERMINAL_ID_RISK_1DAY_WINDOW</th>
+<th>TERMINAL_ID_NB_TX_7DAY_WINDOW</th>
+<th>TERMINAL_ID_RISK_7DAY_WINDOW</th>
+<th>TERMINAL_ID_NB_TX_30DAY_WINDOW</th>
+<th>TERMINAL_ID_RISK_30DAY_WINDOW</th>
+</tr>
+<tr>
+<th>TRANSACTION_ID</th>
+<th></th>
+<th></th>
+<th></th>
+<th></th>
+<th></th>
+<th></th>
+<th></th>
+<th></th>
+<th></th>
+<th></th>
+<th></th>
+<th></th>
+<th></th>
+<th></th>
+<th></th>
+<th></th>
+<th></th>
+<th></th>
+<th></th>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<th>3527</th>
+<td>3527</td>
+<td>2018-04-01 10:17:43</td>
+<td>3774</td>
+<td>3059</td>
+<td>225.41</td>
+<td>37063</td>
+<td>0</td>
+<td>1</td>
+<td>1</td>
+<td>1</td>
+<td>...</td>
+<td>3.0</td>
+<td>158.073333</td>
+<td>3.0</td>
+<td>158.073333</td>
+<td>0.0</td>
+<td>0.0</td>
+<td>0.0</td>
+<td>0.0</td>
+<td>0.0</td>
+<td>0.0</td>
+</tr>
+<tr>
+<th>4732</th>
+<td>4732</td>
+<td>2018-04-01 11:59:14</td>
+<td>55</td>
+<td>3059</td>
+<td>36.28</td>
+<td>43154</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>1</td>
+<td>...</td>
+<td>2.0</td>
+<td>35.670000</td>
+<td>2.0</td>
+<td>35.670000</td>
+<td>0.0</td>
+<td>0.0</td>
+<td>0.0</td>
+<td>0.0</td>
+<td>0.0</td>
+<td>0.0</td>
+</tr>
+<tr>
+<th>16216</th>
+<td>16216</td>
+<td>2018-04-02 14:47:34</td>
+<td>4879</td>
+<td>3059</td>
+<td>105.00</td>
+<td>139654</td>
+<td>1</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>...</td>
+<td>10.0</td>
+<td>76.010000</td>
+<td>10.0</td>
+<td>76.010000</td>
+<td>0.0</td>
+<td>0.0</td>
+<td>0.0</td>
+<td>0.0</td>
+<td>0.0</td>
+<td>0.0</td>
+</tr>
+<tr>
+<th>18249</th>
+<td>18249</td>
+<td>2018-04-02 19:08:10</td>
+<td>2263</td>
+<td>3059</td>
+<td>90.89</td>
+<td>155290</td>
+<td>1</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>...</td>
+<td>7.0</td>
+<td>50.458571</td>
+<td>7.0</td>
+<td>50.458571</td>
+<td>0.0</td>
+<td>0.0</td>
+<td>0.0</td>
+<td>0.0</td>
+<td>0.0</td>
+<td>0.0</td>
+</tr>
+<tr>
+<th>26512</th>
+<td>26512</td>
+<td>2018-04-03 15:44:49</td>
+<td>4879</td>
+<td>3059</td>
+<td>58.51</td>
+<td>229489</td>
+<td>2</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>...</td>
+<td>14.0</td>
+<td>71.070000</td>
+<td>14.0</td>
+<td>71.070000</td>
+<td>0.0</td>
+<td>0.0</td>
+<td>0.0</td>
+<td>0.0</td>
+<td>0.0</td>
+<td>0.0</td>
+</tr>
+<tr>
+<th>...</th>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+</tr>
+<tr>
+<th>1697944</th>
+<td>1697944</td>
+<td>2018-09-25 05:32:56</td>
+<td>402</td>
+<td>3059</td>
+<td>57.30</td>
+<td>15312776</td>
+<td>177</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>...</td>
+<td>14.0</td>
+<td>65.167857</td>
+<td>46.0</td>
+<td>68.163261</td>
+<td>1.0</td>
+<td>0.0</td>
+<td>9.0</td>
+<td>0.0</td>
+<td>36.0</td>
+<td>0.0</td>
+</tr>
+<tr>
+<th>1701971</th>
+<td>1701971</td>
+<td>2018-09-25 12:30:54</td>
+<td>1035</td>
+<td>3059</td>
+<td>7.56</td>
+<td>15337854</td>
+<td>177</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>...</td>
+<td>23.0</td>
+<td>7.052174</td>
+<td>107.0</td>
+<td>6.763738</td>
+<td>2.0</td>
+<td>0.0</td>
+<td>10.0</td>
+<td>0.0</td>
+<td>36.0</td>
+<td>0.0</td>
+</tr>
+<tr>
+<th>1704512</th>
+<td>1704512</td>
+<td>2018-09-25 16:37:41</td>
+<td>1519</td>
+<td>3059</td>
+<td>35.79</td>
+<td>15352661</td>
+<td>177</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>...</td>
+<td>7.0</td>
+<td>41.404286</td>
+<td>30.0</td>
+<td>46.780000</td>
+<td>1.0</td>
+<td>0.0</td>
+<td>9.0</td>
+<td>0.0</td>
+<td>36.0</td>
+<td>0.0</td>
+</tr>
+<tr>
+<th>1731937</th>
+<td>1731937</td>
+<td>2018-09-28 14:30:31</td>
+<td>1534</td>
+<td>3059</td>
+<td>81.39</td>
+<td>15604231</td>
+<td>180</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>...</td>
+<td>18.0</td>
+<td>69.477778</td>
+<td>89.0</td>
+<td>63.906629</td>
+<td>1.0</td>
+<td>0.0</td>
+<td>8.0</td>
+<td>0.0</td>
+<td>36.0</td>
+<td>0.0</td>
+</tr>
+<tr>
+<th>1740901</th>
+<td>1740901</td>
+<td>2018-09-29 13:35:17</td>
+<td>118</td>
+<td>3059</td>
+<td>90.96</td>
+<td>15687317</td>
+<td>181</td>
+<td>0</td>
+<td>0</td>
+<td>1</td>
+<td>...</td>
+<td>35.0</td>
+<td>104.233714</td>
+<td>98.0</td>
+<td>91.407143</td>
+<td>0.0</td>
+<td>0.0</td>
+<td>7.0</td>
+<td>0.0</td>
+<td>36.0</td>
+<td>0.0</td>
+</tr>
+</tbody>
+</table>
+<p>193 rows × 23 columns</p>
+</div></div></details><div class="cell-nav"><a href="#cell-30">← 上一格代码</a><a href="#cell-33">下一格代码 →</a></div></article><details class="original" id="original-32"><summary>原单元格 32 · 原书说明</summary><div class="original-content"><p>We can check that the first fraud occurred on the 2018/09/10, and that risk scores only start being counted with a one-week delay. </p>
+<p>Let us finally generate these features for all terminals. This is straightforward using the Panda <code>groupby</code> and <code>apply</code> methods. </p></div></details><article class="cell" id="cell-33" data-cell="33"><div class="tag">原单元格 33 · 2 行 · 专项补注 + 逐行语法</div><h2 class="cell-title">%time transactions_df=transactions_df.groupby(&#x27;TERMINAL_ID&#x27;).apply(lambda x:…</h2><p><strong>这格解决什么：</strong> 为所有终端的交易添加延迟风险特征。</p><div class="states"><div class="state"><strong>执行前</strong><p>全体交易已有客户特征；终端函数可接收一个终端子表。</p></div><div class="state"><strong>执行后</strong><p>每行新增相应终端的六列历史特征，总表重新按时间排好并重置行索引。</p></div></div><h3>原代码 · 保持原样</h3><pre class="source"><span class="sr-only">原始代码，行号仅供定位。</span><span class="code-line"><span class="line-no">001</span><code>%time transactions_df=transactions_df.groupby(&#x27;TERMINAL_ID&#x27;).apply(lambda x: get_count_risk_rolling_window(x, delay_period=7, windows_size_in_days=[1,7,30], feature=&quot;TERMINAL_ID&quot;))</code></span><span class="code-line"><span class="line-no">002</span><code>transactions_df=transactions_df.sort_values(&#x27;TX_DATETIME&#x27;).reset_index(drop=True)</code></span></pre><div class="walkthrough"><h3>顺着代码看数据怎样变化</h3><p>与客户分组那格对照读：分组键改成 <code>'TERMINAL_ID'</code>，函数改成 <code>get_count_risk_rolling_window</code>，每个 <code>x</code> 现在是一台终端接收的多位客户交易。客户特征不会因此变成终端特征；已有列跟着原行保留，新增列才描述终端。</p>
+<p>人工四行 A在T1、B在T2、C在T1、A在T2，分组得到 T1 的第一/三行和 T2 的第二/四行。只在各组内计算可见历史。最终按时间排序，再 <code>reset_index(drop=True)</code>。这一步的关键学习能力是“改变观察单位”：同一笔交易可以同时具有客户历史与终端历史。</p></div><div class="dependencies"><strong>追踪被调用的教材函数</strong><p><a href="02-BaselineFeatureTransformation.html#cell-27"><code>get_count_risk_rolling_window</code> → 原单元格 27</a></p><small>链接优先当前笔记本的前置定义，其次公共函数。原环境若由外部脚本覆盖同名函数，还需核对实际绑定。</small></div><h3>一行一行读 · 可展开符号解释</h3><div class="line-table-wrap"><table class="line-table"><thead><tr><th>原始代码 · 逐行定位</th><th>动作与状态变化</th></tr></thead><tbody><tr id="cell-33-line-1"><td class="codecell"><a class="row-label" href="#cell-33-line-1">第 1 行</a><pre><code>%time transactions_df=transactions_df.groupby(&#x27;TERMINAL_ID&#x27;).apply(lambda x: get_count_risk_rolling_window(x, delay_period=7, windows_size_in_days=[1,7,30], feature=&quot;TERMINAL_ID&quot;))</code></pre></td><td><p class="scope">处于单元格顶层；真正执行本cell并到达此语句时才发生，静态精读本身不执行代码</p><p>IPython 的 %time 会执行后面的语句并记录耗时；计时结果取决于运行环境。 先计算右侧：将给定函数应用到指定对象的元素、行列或分组；准确粒度由接收对象和 axis 决定。传入：位置参数1是 <code>lambda x: get_count_risk_rolling_window(x, delay_period=7, windows_size_in_days=[1, 7, 30], feature='TERMINAL_ID')</code>。</p><p>把结果绑定到 <code>transactions_df</code>。名称原来的引用被替换；若右侧只是另一个对象变量，这通常是共享引用，不是自动复制。</p><ul>
+<li>求值 <code>transactions_df.groupby('TERMINAL_ID')</code>：按键划分组，先形成分组对象；后面的聚合或 apply 才决定输出。传入：位置参数1是 <code>'TERMINAL_ID'</code></li>
+<li><code>lambda x: get_count_risk_rolling_window(x, delay_period=7, windows_size_in_days=[1, 7, 30], feature='TERMINAL_ID')</code>：定义临时函数，接收 <code>x</code>，调用时计算并返回 <code>get_count_risk_rolling_window(x, delay_period=7, windows_size_in_days=[1, 7, 30], feature='TERMINAL_ID')</code></li>
+<li>求值 <code>transactions_df.groupby('TERMINAL_ID').apply(lambda x: get_count_risk_rolling_window(x, delay_period=7, windows_size_in_days=[1, 7, 30], feature='TERMINAL_ID'))</code>：将给定函数应用到指定对象的元素、行列或分组；准确粒度由接收对象和 axis 决定。传入：位置参数1是 <code>lambda x: get_count_risk_rolling_window(x, delay_period=7, windows_size_in_days=[1, 7, 30], feature='TERMINAL_ID')</code></li>
+</ul><ul>
+<li>调用 <code>transactions_df.groupby('TERMINAL_ID').apply</code> 时的位置参数1：<code>lambda x: get_count_risk_rolling_window(x, delay_period=7, windows_size_in_days=[1, 7, 30], feature='TERMINAL_ID')</code>；先求出该表达式再传入</li>
+<li>调用 <code>transactions_df.groupby</code> 时的位置参数1：<code>'TERMINAL_ID'</code>；先求出该表达式再传入</li>
+<li>调用 <code>get_count_risk_rolling_window</code> 时的位置参数1：<code>x</code>；先求出该表达式再传入</li>
+<li>调用 <code>get_count_risk_rolling_window</code> 时的具名参数 <code>delay_period</code> 接收 <code>7</code></li>
+<li>调用 <code>get_count_risk_rolling_window</code> 时的具名参数 <code>windows_size_in_days</code> 接收 <code>[1, 7, 30]</code></li>
+<li>调用 <code>get_count_risk_rolling_window</code> 时的具名参数 <code>feature</code> 接收 <code>'TERMINAL_ID'</code></li>
+</ul><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li><code>=</code> 在赋值位置把右侧结果交给左侧；在调用的 <code>参数名=值</code> 中则指定参数，不是在比较。</li>
+<li>点号从左侧对象或模块中取属性/方法；后接 <code>(...)</code> 才是在调用可调用成员。</li>
+<li>方括号可能创建列表，也可能是已有对象的索引/切片。<code>表[列名]</code>、<code>表[条件]</code> 与 <code>[值1,值2]</code> 的用途不同。</li>
+<li>圆括号在可调用表达式后可表示调用，也可用于运算分组、元组或类的基类声明；应结合当前语句。</li>
+<li>冒号在语句末尾引出缩进块，在方括号内可表示切片，在字典内分隔键和值。</li>
+<li>逗号分隔参数、元素或解包目标，项目的先后顺序可能决定字段或维度对应。</li>
+<li><code>delay_period</code>：反馈延迟天数</li>
+<li><code>transactions_df</code>：交易明细 DataFrame，每行通常对应一笔交易</li>
+<li><code>windows_size_in_days</code>：需要分别计算的多个窗口天数</li>
+</ul></details></td></tr><tr id="cell-33-line-2"><td class="codecell"><a class="row-label" href="#cell-33-line-2">第 2 行</a><pre><code>transactions_df=transactions_df.sort_values(&#x27;TX_DATETIME&#x27;).reset_index(drop=True)</code></pre></td><td><p class="scope">处于单元格顶层；真正执行本cell并到达此语句时才发生，静态精读本身不执行代码</p><p>先计算右侧：重置行索引；drop=True 丢弃旧索引，否则旧索引通常转为列。传入：<code>drop=True</code> 是具名参数。</p><p>把结果绑定到 <code>transactions_df</code>。名称原来的引用被替换；若右侧只是另一个对象变量，这通常是共享引用，不是自动复制。</p><ul>
+<li>求值 <code>transactions_df.sort_values('TX_DATETIME')</code>：按给定列排序；默认返回排序结果，只有明确 inplace 才原地修改。传入：位置参数1是 <code>'TX_DATETIME'</code></li>
+<li>求值 <code>transactions_df.sort_values('TX_DATETIME').reset_index(drop=True)</code>：重置行索引；drop=True 丢弃旧索引，否则旧索引通常转为列。传入：<code>drop=True</code> 是具名参数</li>
+</ul><ul>
+<li>调用 <code>transactions_df.sort_values('TX_DATETIME').reset_index</code> 时的具名参数 <code>drop</code> 接收 <code>True</code></li>
+<li>调用 <code>transactions_df.sort_values</code> 时的位置参数1：<code>'TX_DATETIME'</code>；先求出该表达式再传入</li>
+</ul><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li><code>=</code> 在赋值位置把右侧结果交给左侧；在调用的 <code>参数名=值</code> 中则指定参数，不是在比较。</li>
+<li>点号从左侧对象或模块中取属性/方法；后接 <code>(...)</code> 才是在调用可调用成员。</li>
+<li>圆括号在可调用表达式后可表示调用，也可用于运算分组、元组或类的基类声明；应结合当前语句。</li>
+<li><code>transactions_df</code>：交易明细 DataFrame，每行通常对应一笔交易</li>
+</ul></details></td></tr></tbody></table></div><details class="historical"><summary>原书保存的历史输出 · 本次未运行</summary><p class="muted">以下内容原本就在 Notebook 文件中；其中的数字、图、警告与耗时不代表你当前电脑的运行结果。</p><pre class="historic-text">CPU times: user 2min 27s, sys: 2.23 s, total: 2min 29s
+Wall time: 2min 41s
+</pre></details><div class="cell-nav"><a href="#cell-31">← 上一格代码</a><a href="#cell-34">下一格代码 →</a></div></article><article class="cell" id="cell-34" data-cell="34"><div class="tag">原单元格 34 · 1 行 · 专项补注 + 逐行语法</div><h2 class="cell-title">transactions_df</h2><p><strong>这格解决什么：</strong> 查看最终特征表。</p><div class="states"><div class="state"><strong>执行前</strong><p>客户、终端与时间特征均已添加。</p></div><div class="state"><strong>执行后</strong><p>仅显示；不保存、不训练。</p></div></div><h3>原代码 · 保持原样</h3><pre class="source"><span class="sr-only">原始代码，行号仅供定位。</span><span class="code-line"><span class="line-no">001</span><code>transactions_df</code></span></pre><div class="walkthrough"><h3>顺着代码看数据怎样变化</h3><p>此时可以把一行读成一笔交易的“当前信息＋客户行为背景＋终端历史背景”。标签列仍用于后续监督训练，不能混进输入列。表里有某个字段，不等于训练时一定会使用它；真正的模型输入由 BaselineModeling 的 input_features 明确挑选。</p></div><h3>一行一行读 · 可展开符号解释</h3><div class="line-table-wrap"><table class="line-table"><thead><tr><th>原始代码 · 逐行定位</th><th>动作与状态变化</th></tr></thead><tbody><tr id="cell-34-line-1"><td class="codecell"><a class="row-label" href="#cell-34-line-1">第 1 行</a><pre><code>transactions_df</code></pre></td><td><p class="scope">处于单元格顶层；真正执行本cell并到达此语句时才发生，静态精读本身不执行代码</p><p>变量 <code>transactions_df</code> 当前引用的值。</p><p>本行没有用等号把返回值另存到名称。若是对象方法可能有副作用；若是单元格最后一个表达式，Jupyter通常会显示其返回结果。</p><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li><code>transactions_df</code>：交易明细 DataFrame，每行通常对应一笔交易</li>
+</ul></details></td></tr></tbody></table></div><details class="historical"><summary>原书保存的历史输出 · 本次未运行</summary><p class="muted">以下内容原本就在 Notebook 文件中；其中的数字、图、警告与耗时不代表你当前电脑的运行结果。</p><div class="historic-table"><div>
+
+<table border="1" class="dataframe">
+<thead>
+<tr>
+<th></th>
+<th>TRANSACTION_ID</th>
+<th>TX_DATETIME</th>
+<th>CUSTOMER_ID</th>
+<th>TERMINAL_ID</th>
+<th>TX_AMOUNT</th>
+<th>TX_TIME_SECONDS</th>
+<th>TX_TIME_DAYS</th>
+<th>TX_FRAUD</th>
+<th>TX_FRAUD_SCENARIO</th>
+<th>TX_DURING_WEEKEND</th>
+<th>...</th>
+<th>CUSTOMER_ID_NB_TX_7DAY_WINDOW</th>
+<th>CUSTOMER_ID_AVG_AMOUNT_7DAY_WINDOW</th>
+<th>CUSTOMER_ID_NB_TX_30DAY_WINDOW</th>
+<th>CUSTOMER_ID_AVG_AMOUNT_30DAY_WINDOW</th>
+<th>TERMINAL_ID_NB_TX_1DAY_WINDOW</th>
+<th>TERMINAL_ID_RISK_1DAY_WINDOW</th>
+<th>TERMINAL_ID_NB_TX_7DAY_WINDOW</th>
+<th>TERMINAL_ID_RISK_7DAY_WINDOW</th>
+<th>TERMINAL_ID_NB_TX_30DAY_WINDOW</th>
+<th>TERMINAL_ID_RISK_30DAY_WINDOW</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<th>0</th>
+<td>0</td>
+<td>2018-04-01 00:00:31</td>
+<td>596</td>
+<td>3156</td>
+<td>57.16</td>
+<td>31</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>1</td>
+<td>...</td>
+<td>1.0</td>
+<td>57.160000</td>
+<td>1.0</td>
+<td>57.160000</td>
+<td>0.0</td>
+<td>0.0</td>
+<td>0.0</td>
+<td>0.0</td>
+<td>0.0</td>
+<td>0.00000</td>
+</tr>
+<tr>
+<th>1</th>
+<td>1</td>
+<td>2018-04-01 00:02:10</td>
+<td>4961</td>
+<td>3412</td>
+<td>81.51</td>
+<td>130</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>1</td>
+<td>...</td>
+<td>1.0</td>
+<td>81.510000</td>
+<td>1.0</td>
+<td>81.510000</td>
+<td>0.0</td>
+<td>0.0</td>
+<td>0.0</td>
+<td>0.0</td>
+<td>0.0</td>
+<td>0.00000</td>
+</tr>
+<tr>
+<th>2</th>
+<td>2</td>
+<td>2018-04-01 00:07:56</td>
+<td>2</td>
+<td>1365</td>
+<td>146.00</td>
+<td>476</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>1</td>
+<td>...</td>
+<td>1.0</td>
+<td>146.000000</td>
+<td>1.0</td>
+<td>146.000000</td>
+<td>0.0</td>
+<td>0.0</td>
+<td>0.0</td>
+<td>0.0</td>
+<td>0.0</td>
+<td>0.00000</td>
+</tr>
+<tr>
+<th>3</th>
+<td>3</td>
+<td>2018-04-01 00:09:29</td>
+<td>4128</td>
+<td>8737</td>
+<td>64.49</td>
+<td>569</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>1</td>
+<td>...</td>
+<td>1.0</td>
+<td>64.490000</td>
+<td>1.0</td>
+<td>64.490000</td>
+<td>0.0</td>
+<td>0.0</td>
+<td>0.0</td>
+<td>0.0</td>
+<td>0.0</td>
+<td>0.00000</td>
+</tr>
+<tr>
+<th>4</th>
+<td>4</td>
+<td>2018-04-01 00:10:34</td>
+<td>927</td>
+<td>9906</td>
+<td>50.99</td>
+<td>634</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>1</td>
+<td>...</td>
+<td>1.0</td>
+<td>50.990000</td>
+<td>1.0</td>
+<td>50.990000</td>
+<td>0.0</td>
+<td>0.0</td>
+<td>0.0</td>
+<td>0.0</td>
+<td>0.0</td>
+<td>0.00000</td>
+</tr>
+<tr>
+<th>...</th>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+</tr>
+<tr>
+<th>1754150</th>
+<td>1754150</td>
+<td>2018-09-30 23:56:36</td>
+<td>161</td>
+<td>655</td>
+<td>54.24</td>
+<td>15810996</td>
+<td>182</td>
+<td>0</td>
+<td>0</td>
+<td>1</td>
+<td>...</td>
+<td>12.0</td>
+<td>67.047500</td>
+<td>72.0</td>
+<td>69.521111</td>
+<td>1.0</td>
+<td>0.0</td>
+<td>4.0</td>
+<td>0.0</td>
+<td>28.0</td>
+<td>0.00000</td>
+</tr>
+<tr>
+<th>1754151</th>
+<td>1754151</td>
+<td>2018-09-30 23:57:38</td>
+<td>4342</td>
+<td>6181</td>
+<td>1.23</td>
+<td>15811058</td>
+<td>182</td>
+<td>0</td>
+<td>0</td>
+<td>1</td>
+<td>...</td>
+<td>21.0</td>
+<td>22.173810</td>
+<td>93.0</td>
+<td>24.780753</td>
+<td>1.0</td>
+<td>0.0</td>
+<td>9.0</td>
+<td>0.0</td>
+<td>39.0</td>
+<td>0.00000</td>
+</tr>
+<tr>
+<th>1754152</th>
+<td>1754152</td>
+<td>2018-09-30 23:58:21</td>
+<td>618</td>
+<td>1502</td>
+<td>6.62</td>
+<td>15811101</td>
+<td>182</td>
+<td>0</td>
+<td>0</td>
+<td>1</td>
+<td>...</td>
+<td>21.0</td>
+<td>7.400476</td>
+<td>65.0</td>
+<td>7.864462</td>
+<td>1.0</td>
+<td>0.0</td>
+<td>5.0</td>
+<td>0.0</td>
+<td>33.0</td>
+<td>0.00000</td>
+</tr>
+<tr>
+<th>1754153</th>
+<td>1754153</td>
+<td>2018-09-30 23:59:52</td>
+<td>4056</td>
+<td>3067</td>
+<td>55.40</td>
+<td>15811192</td>
+<td>182</td>
+<td>0</td>
+<td>0</td>
+<td>1</td>
+<td>...</td>
+<td>16.0</td>
+<td>107.052500</td>
+<td>51.0</td>
+<td>102.919608</td>
+<td>1.0</td>
+<td>0.0</td>
+<td>6.0</td>
+<td>0.0</td>
+<td>28.0</td>
+<td>0.00000</td>
+</tr>
+<tr>
+<th>1754154</th>
+<td>1754154</td>
+<td>2018-09-30 23:59:57</td>
+<td>3542</td>
+<td>9849</td>
+<td>23.59</td>
+<td>15811197</td>
+<td>182</td>
+<td>0</td>
+<td>0</td>
+<td>1</td>
+<td>...</td>
+<td>24.0</td>
+<td>35.308333</td>
+<td>119.0</td>
+<td>37.251513</td>
+<td>1.0</td>
+<td>0.0</td>
+<td>12.0</td>
+<td>0.0</td>
+<td>41.0</td>
+<td>0.02439</td>
+</tr>
+</tbody>
+</table>
+<p>1754155 rows × 23 columns</p>
+</div></div></details><div class="cell-nav"><a href="#cell-33">← 上一格代码</a><a href="#cell-36">下一格代码 →</a></div></article><details class="original" id="original-35"><summary>原单元格 35 · Saving of dataset</summary><div class="original-content"><h2>Saving of dataset</h2>
+<p>Let us finally save the dataset, split into daily batches, using the pickle format. </p></div></details><article class="cell" id="cell-36" data-cell="36"><div class="tag">原单元格 36 · 16 行 · 专项补注 + 逐行语法</div><h2 class="cell-title">DIR_OUTPUT = &quot;./simulated-data-transformed/&quot; if not os.path.exists(DIR_OUTPU…</h2><p><strong>这格解决什么：</strong> 按天把加工后的交易表保存为 pickle 文件。</p><div class="states"><div class="state"><strong>执行前</strong><p>transactions_df 已有 TX_TIME_DAYS、TX_TIME_SECONDS 和新增特征。</p></div><div class="state"><strong>执行后</strong><p>实际运行会创建输出目录并为每个日编号写文件；这是写盘动作，本精读未执行。</p></div></div><h3>原代码 · 保持原样</h3><pre class="source"><span class="sr-only">原始代码，行号仅供定位。</span><span class="code-line"><span class="line-no">001</span><code>DIR_OUTPUT = &quot;./simulated-data-transformed/&quot;</code></span><span class="code-line"><span class="line-no">002</span><code> </code></span><span class="code-line"><span class="line-no">003</span><code>if not os.path.exists(DIR_OUTPUT):</code></span><span class="code-line"><span class="line-no">004</span><code>    os.makedirs(DIR_OUTPUT)</code></span><span class="code-line"><span class="line-no">005</span><code> </code></span><span class="code-line"><span class="line-no">006</span><code>start_date = datetime.datetime.strptime(&quot;2018-04-01&quot;, &quot;%Y-%m-%d&quot;)</code></span><span class="code-line"><span class="line-no">007</span><code> </code></span><span class="code-line"><span class="line-no">008</span><code>for day in range(transactions_df.TX_TIME_DAYS.max()+1):</code></span><span class="code-line"><span class="line-no">009</span><code>    </code></span><span class="code-line"><span class="line-no">010</span><code>    transactions_day = transactions_df[transactions_df.TX_TIME_DAYS==day].sort_values(&#x27;TX_TIME_SECONDS&#x27;)</code></span><span class="code-line"><span class="line-no">011</span><code>    </code></span><span class="code-line"><span class="line-no">012</span><code>    date = start_date + datetime.timedelta(days=day)</code></span><span class="code-line"><span class="line-no">013</span><code>    filename_output = date.strftime(&quot;%Y-%m-%d&quot;)+&#x27;.pkl&#x27;</code></span><span class="code-line"><span class="line-no">014</span><code>    </code></span><span class="code-line"><span class="line-no">015</span><code>    # Protocol=4 required for Google Colab</code></span><span class="code-line"><span class="line-no">016</span><code>    transactions_day.to_pickle(DIR_OUTPUT+filename_output, protocol=4)</code></span></pre><div class="walkthrough"><h3>顺着代码看数据怎样变化</h3><p><code>range(max_day+1)</code> 包含 0 到最大天编号；加 1 是因为 Python 范围的右端不包含。每轮用 <code>TX_TIME_DAYS==day</code> 取当天交易，再按秒数排序。<code>start_date+timedelta(days=day)</code> 把日编号换成日期，<code>.strftime('%Y-%m-%d')</code> 生成文件名的一部分。</p>
+<p>人工演示最大日编号为 2：循环依次处理 0、1、2，日期从起点依次加 0、1、2 天。<code>to_pickle(...,protocol=4)</code> 将当天的表序列化，和 <code>return</code> 把对象交回调用者完全不同。若文件已存在，实际写入可能覆盖；此页面只是阅读，不会触发保存。</p>
+<p>留意原笔记本这里输出到 <code>./simulated-data-transformed/</code>，下一份基准建模读取的是仓库数据路径 <code>./simulated-data-transformed/data/</code>。两者用途和目录层级要核对，不能以为只运行完本格，另一页默认路径一定立刻对应你的输出。</p></div><h3>一行一行读 · 可展开符号解释</h3><div class="line-table-wrap"><table class="line-table"><thead><tr><th>原始代码 · 逐行定位</th><th>动作与状态变化</th></tr></thead><tbody><tr id="cell-36-line-1"><td class="codecell"><a class="row-label" href="#cell-36-line-1">第 1 行</a><pre><code>DIR_OUTPUT = &quot;./simulated-data-transformed/&quot;</code></pre></td><td><p class="scope">处于单元格顶层；真正执行本cell并到达此语句时才发生，静态精读本身不执行代码</p><p>先计算右侧：字符串 <code>./simulated-data-transformed/</code>（文字，不是同名变量）。</p><p>把结果绑定到 <code>DIR_OUTPUT</code>。名称原来的引用被替换；若右侧只是另一个对象变量，这通常是共享引用，不是自动复制。</p><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li><code>=</code> 在赋值位置把右侧结果交给左侧；在调用的 <code>参数名=值</code> 中则指定参数，不是在比较。</li>
+</ul></details></td></tr><tr id="cell-36-line-3"><td class="codecell"><a class="row-label" href="#cell-36-line-3">第 3 行</a><pre><code>if not os.path.exists(DIR_OUTPUT):</code></pre></td><td><p class="scope">处于单元格顶层；真正执行本cell并到达此语句时才发生，静态精读本身不执行代码</p><p>判断条件：对条件取逻辑否定，作用对象是 <code>os.path.exists(DIR_OUTPUT)</code>。</p><p>条件成立才执行相应缩进分支，不成立则转到后续 elif/else 或跳过。</p><ul>
+<li>求值 <code>os.path.exists(DIR_OUTPUT)</code>：检查路径是否存在，返回布尔值。传入：位置参数1是 <code>DIR_OUTPUT</code></li>
+<li>求值 <code>not os.path.exists(DIR_OUTPUT)</code>：对条件取逻辑否定，作用对象是 <code>os.path.exists(DIR_OUTPUT)</code></li>
+</ul><ul>
+<li>调用 <code>os.path.exists</code> 时的位置参数1：<code>DIR_OUTPUT</code>；先求出该表达式再传入</li>
+</ul><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li>点号从左侧对象或模块中取属性/方法；后接 <code>(...)</code> 才是在调用可调用成员。</li>
+<li>圆括号在可调用表达式后可表示调用，也可用于运算分组、元组或类的基类声明；应结合当前语句。</li>
+<li>冒号在语句末尾引出缩进块，在方括号内可表示切片，在字典内分隔键和值。</li>
+</ul></details></td></tr><tr id="cell-36-line-4"><td class="codecell"><a class="row-label" href="#cell-36-line-4">第 4 行</a><pre><code>    os.makedirs(DIR_OUTPUT)</code></pre></td><td><p class="scope">仅在条件 `not os.path.exists(DIR_OUTPUT)` 成立的分支中执行</p><p>创建目录；这会写入文件系统。传入：位置参数1是 <code>DIR_OUTPUT</code>。</p><p>本行没有用等号把返回值另存到名称。若是对象方法可能有副作用；若是单元格最后一个表达式，Jupyter通常会显示其返回结果。</p><ul>
+<li>求值 <code>os.makedirs(DIR_OUTPUT)</code>：创建目录；这会写入文件系统。传入：位置参数1是 <code>DIR_OUTPUT</code></li>
+</ul><ul>
+<li>调用 <code>os.makedirs</code> 时的位置参数1：<code>DIR_OUTPUT</code>；先求出该表达式再传入</li>
+</ul><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li>点号从左侧对象或模块中取属性/方法；后接 <code>(...)</code> 才是在调用可调用成员。</li>
+<li>圆括号在可调用表达式后可表示调用，也可用于运算分组、元组或类的基类声明；应结合当前语句。</li>
+<li>行首缩进说明它处于某个函数、循环、分支或括号续行中；不要仅看视觉对齐就判断执行次数。</li>
+</ul></details></td></tr><tr id="cell-36-line-6"><td class="codecell"><a class="row-label" href="#cell-36-line-6">第 6 行</a><pre><code>start_date = datetime.datetime.strptime(&quot;2018-04-01&quot;, &quot;%Y-%m-%d&quot;)</code></pre></td><td><p class="scope">处于单元格顶层；真正执行本cell并到达此语句时才发生，静态精读本身不执行代码</p><p>先计算右侧：按格式字符串把文字日期解析为 datetime 对象。传入：位置参数1是 <code>'2018-04-01'</code>；位置参数2是 <code>'%Y-%m-%d'</code>。</p><p>把结果绑定到 <code>start_date</code>。名称原来的引用被替换；若右侧只是另一个对象变量，这通常是共享引用，不是自动复制。</p><ul>
+<li>求值 <code>datetime.datetime.strptime('2018-04-01', '%Y-%m-%d')</code>：按格式字符串把文字日期解析为 datetime 对象。传入：位置参数1是 <code>'2018-04-01'</code>；位置参数2是 <code>'%Y-%m-%d'</code></li>
+</ul><ul>
+<li>调用 <code>datetime.datetime.strptime</code> 时的位置参数1：<code>'2018-04-01'</code>；先求出该表达式再传入</li>
+<li>调用 <code>datetime.datetime.strptime</code> 时的位置参数2：<code>'%Y-%m-%d'</code>；先求出该表达式再传入</li>
+</ul><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li><code>=</code> 在赋值位置把右侧结果交给左侧；在调用的 <code>参数名=值</code> 中则指定参数，不是在比较。</li>
+<li>点号从左侧对象或模块中取属性/方法；后接 <code>(...)</code> 才是在调用可调用成员。</li>
+<li>圆括号在可调用表达式后可表示调用，也可用于运算分组、元组或类的基类声明；应结合当前语句。</li>
+<li>逗号分隔参数、元素或解包目标，项目的先后顺序可能决定字段或维度对应。</li>
+</ul></details></td></tr><tr id="cell-36-line-8"><td class="codecell"><a class="row-label" href="#cell-36-line-8">第 8 行</a><pre><code>for day in range(transactions_df.TX_TIME_DAYS.max()+1):</code></pre></td><td><p class="scope">处于单元格顶层；真正执行本cell并到达此语句时才发生，静态精读本身不执行代码</p><p>遍历 <code>range(transactions_df.TX_TIME_DAYS.max() + 1)</code>，每次把取出的项交给 <code>day</code>。</p><p>对每项执行缩进体；循环变量通常被下一项覆盖，累计结果需另放列表、表格或计数器。空可迭代对象不会执行循环体。</p><ul>
+<li>求值 <code>transactions_df.TX_TIME_DAYS.max()</code>：取最大值；DataFrame 分列取最大值时不同列可能来自不同原行。这里没有显式传入参数</li>
+<li>求值 <code>transactions_df.TX_TIME_DAYS.max() + 1</code>：先计算 <code>transactions_df.TX_TIME_DAYS.max()</code> 与 <code>1</code>；数值的 + 是相加，列表或字符串的 + 是按顺序拼接，数组/Series则按各自对齐规则计算</li>
+<li>求值 <code>range(transactions_df.TX_TIME_DAYS.max() + 1)</code>：创建供循环使用的整数范围，终点不包含在内。传入：位置参数1是 <code>transactions_df.TX_TIME_DAYS.max() + 1</code></li>
+</ul><ul>
+<li>调用 <code>range</code> 时的位置参数1：<code>transactions_df.TX_TIME_DAYS.max() + 1</code>；先求出该表达式再传入</li>
+</ul><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li>点号从左侧对象或模块中取属性/方法；后接 <code>(...)</code> 才是在调用可调用成员。</li>
+<li>圆括号在可调用表达式后可表示调用，也可用于运算分组、元组或类的基类声明；应结合当前语句。</li>
+<li>冒号在语句末尾引出缩进块，在方括号内可表示切片，在字典内分隔键和值。</li>
+<li><code>TX_TIME_DAYS</code>：相对模拟起点的整天编号</li>
+<li><code>transactions_df</code>：交易明细 DataFrame，每行通常对应一笔交易</li>
+</ul></details></td></tr><tr id="cell-36-line-10"><td class="codecell"><a class="row-label" href="#cell-36-line-10">第 10 行</a><pre><code>    transactions_day = transactions_df[transactions_df.TX_TIME_DAYS==day].sort_values(&#x27;TX_TIME_SECONDS&#x27;)</code></pre></td><td><p class="scope">属于循环体，仅在本轮从 `range(transactions_df.TX_TIME_DAYS.max() + 1)` 取得一项赋给 `day`后走到本行时执行</p><p>先计算右侧：按给定列排序；默认返回排序结果，只有明确 inplace 才原地修改。传入：位置参数1是 <code>'TX_TIME_SECONDS'</code>。</p><p>把结果绑定到 <code>transactions_day</code>。名称原来的引用被替换；若右侧只是另一个对象变量，这通常是共享引用，不是自动复制。</p><ul>
+<li>求值 <code>transactions_df.TX_TIME_DAYS == day</code>：判断<code>transactions_df.TX_TIME_DAYS</code> 是否等于 <code>day</code>；标量比较通常给一个布尔值，数组或Series比较通常逐项给布尔值</li>
+<li>求值 <code>transactions_df[transactions_df.TX_TIME_DAYS == day]</code>：从 <code>transactions_df</code> 中按 <code>transactions_df.TX_TIME_DAYS == day</code> 取值；字符串常指列或字典键，布尔序列常用于筛选，整数的含义取决于对象的索引规则</li>
+<li>求值 <code>transactions_df[transactions_df.TX_TIME_DAYS == day].sort_values('TX_TIME_SECONDS')</code>：按给定列排序；默认返回排序结果，只有明确 inplace 才原地修改。传入：位置参数1是 <code>'TX_TIME_SECONDS'</code></li>
+</ul><ul>
+<li>调用 <code>transactions_df[transactions_df.TX_TIME_DAYS == day].sort_values</code> 时的位置参数1：<code>'TX_TIME_SECONDS'</code>；先求出该表达式再传入</li>
+</ul><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li><code>=</code> 在赋值位置把右侧结果交给左侧；在调用的 <code>参数名=值</code> 中则指定参数，不是在比较。</li>
+<li>比较符生成判断结果；<code>==</code> 比较值是否相等，<code>=</code> 用于赋值或具名参数。</li>
+<li>点号从左侧对象或模块中取属性/方法；后接 <code>(...)</code> 才是在调用可调用成员。</li>
+<li>方括号可能创建列表，也可能是已有对象的索引/切片。<code>表[列名]</code>、<code>表[条件]</code> 与 <code>[值1,值2]</code> 的用途不同。</li>
+<li>圆括号在可调用表达式后可表示调用，也可用于运算分组、元组或类的基类声明；应结合当前语句。</li>
+<li>行首缩进说明它处于某个函数、循环、分支或括号续行中；不要仅看视觉对齐就判断执行次数。</li>
+<li><code>TX_TIME_DAYS</code>：相对模拟起点的整天编号</li>
+<li><code>transactions_df</code>：交易明细 DataFrame，每行通常对应一笔交易</li>
+</ul></details></td></tr><tr id="cell-36-line-12"><td class="codecell"><a class="row-label" href="#cell-36-line-12">第 12 行</a><pre><code>    date = start_date + datetime.timedelta(days=day)</code></pre></td><td><p class="scope">属于循环体，仅在本轮从 `range(transactions_df.TX_TIME_DAYS.max() + 1)` 取得一项赋给 `day`后走到本行时执行</p><p>先计算右侧：先计算 <code>start_date</code> 与 <code>datetime.timedelta(days=day)</code>；数值的 + 是相加，列表或字符串的 + 是按顺序拼接，数组/Series则按各自对齐规则计算。</p><p>把结果绑定到 <code>date</code>。名称原来的引用被替换；若右侧只是另一个对象变量，这通常是共享引用，不是自动复制。</p><ul>
+<li>求值 <code>datetime.timedelta(days=day)</code>：构造时间间隔，关键字 days/seconds 决定单位。传入：<code>days=day</code> 是具名参数</li>
+<li>求值 <code>start_date + datetime.timedelta(days=day)</code>：先计算 <code>start_date</code> 与 <code>datetime.timedelta(days=day)</code>；数值的 + 是相加，列表或字符串的 + 是按顺序拼接，数组/Series则按各自对齐规则计算</li>
+</ul><ul>
+<li>调用 <code>datetime.timedelta</code> 时的具名参数 <code>days</code> 接收 <code>day</code></li>
+</ul><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li><code>=</code> 在赋值位置把右侧结果交给左侧；在调用的 <code>参数名=值</code> 中则指定参数，不是在比较。</li>
+<li>点号从左侧对象或模块中取属性/方法；后接 <code>(...)</code> 才是在调用可调用成员。</li>
+<li>圆括号在可调用表达式后可表示调用，也可用于运算分组、元组或类的基类声明；应结合当前语句。</li>
+<li>行首缩进说明它处于某个函数、循环、分支或括号续行中；不要仅看视觉对齐就判断执行次数。</li>
+</ul></details></td></tr><tr id="cell-36-line-13"><td class="codecell"><a class="row-label" href="#cell-36-line-13">第 13 行</a><pre><code>    filename_output = date.strftime(&quot;%Y-%m-%d&quot;)+&#x27;.pkl&#x27;</code></pre></td><td><p class="scope">属于循环体，仅在本轮从 `range(transactions_df.TX_TIME_DAYS.max() + 1)` 取得一项赋给 `day`后走到本行时执行</p><p>先计算右侧：先计算 <code>date.strftime('%Y-%m-%d')</code> 与 <code>'.pkl'</code>；数值的 + 是相加，列表或字符串的 + 是按顺序拼接，数组/Series则按各自对齐规则计算。</p><p>把结果绑定到 <code>filename_output</code>。名称原来的引用被替换；若右侧只是另一个对象变量，这通常是共享引用，不是自动复制。</p><ul>
+<li>求值 <code>date.strftime('%Y-%m-%d')</code>：按格式把日期对象转换成文字。传入：位置参数1是 <code>'%Y-%m-%d'</code></li>
+<li>求值 <code>date.strftime('%Y-%m-%d') + '.pkl'</code>：先计算 <code>date.strftime('%Y-%m-%d')</code> 与 <code>'.pkl'</code>；数值的 + 是相加，列表或字符串的 + 是按顺序拼接，数组/Series则按各自对齐规则计算</li>
+</ul><ul>
+<li>调用 <code>date.strftime</code> 时的位置参数1：<code>'%Y-%m-%d'</code>；先求出该表达式再传入</li>
+</ul><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li><code>=</code> 在赋值位置把右侧结果交给左侧；在调用的 <code>参数名=值</code> 中则指定参数，不是在比较。</li>
+<li>点号从左侧对象或模块中取属性/方法；后接 <code>(...)</code> 才是在调用可调用成员。</li>
+<li>圆括号在可调用表达式后可表示调用，也可用于运算分组、元组或类的基类声明；应结合当前语句。</li>
+<li>行首缩进说明它处于某个函数、循环、分支或括号续行中；不要仅看视觉对齐就判断执行次数。</li>
+</ul></details></td></tr><tr id="cell-36-line-15"><td class="codecell"><a class="row-label" href="#cell-36-line-15">第 15 行</a><pre><code>    # Protocol=4 required for Google Colab</code></pre></td><td><p class="scope">本行是注释，不执行。所在上下文：属于循环体，仅在本轮从 `range(transactions_df.TX_TIME_DAYS.max() + 1)` 取得一项赋给 `day`后走到本行时执行</p><p>原作者的说明性注释：Protocol=4 required for Google Colab</p><p>该行不执行赋值、计算或训练。注释与实际实现不一致时，需按代码核对。</p><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li>本行 <code>#</code> 注释供人阅读，不参与运算；字符串内部的 # 不是注释标记。</li>
+<li>行首缩进说明它处于某个函数、循环、分支或括号续行中；不要仅看视觉对齐就判断执行次数。</li>
+</ul></details></td></tr><tr id="cell-36-line-16"><td class="codecell"><a class="row-label" href="#cell-36-line-16">第 16 行</a><pre><code>    transactions_day.to_pickle(DIR_OUTPUT+filename_output, protocol=4)</code></pre></td><td><p class="scope">属于循环体，仅在本轮从 `range(transactions_df.TX_TIME_DAYS.max() + 1)` 取得一项赋给 `day`后走到本行时执行</p><p>把当前对象序列化到指定文件；这是实际写盘动作。传入：位置参数1是 <code>DIR_OUTPUT + filename_output</code>；<code>protocol=4</code> 是具名参数。</p><p>本行没有用等号把返回值另存到名称。若是对象方法可能有副作用；若是单元格最后一个表达式，Jupyter通常会显示其返回结果。</p><ul>
+<li>求值 <code>DIR_OUTPUT + filename_output</code>：先计算 <code>DIR_OUTPUT</code> 与 <code>filename_output</code>；数值的 + 是相加，列表或字符串的 + 是按顺序拼接，数组/Series则按各自对齐规则计算</li>
+<li>求值 <code>transactions_day.to_pickle(DIR_OUTPUT + filename_output, protocol=4)</code>：把当前对象序列化到指定文件；这是实际写盘动作。传入：位置参数1是 <code>DIR_OUTPUT + filename_output</code>；<code>protocol=4</code> 是具名参数</li>
+</ul><ul>
+<li>调用 <code>transactions_day.to_pickle</code> 时的位置参数1：<code>DIR_OUTPUT + filename_output</code>；先求出该表达式再传入</li>
+<li>调用 <code>transactions_day.to_pickle</code> 时的具名参数 <code>protocol</code> 接收 <code>4</code></li>
+</ul><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li><code>=</code> 在赋值位置把右侧结果交给左侧；在调用的 <code>参数名=值</code> 中则指定参数，不是在比较。</li>
+<li>点号从左侧对象或模块中取属性/方法；后接 <code>(...)</code> 才是在调用可调用成员。</li>
+<li>圆括号在可调用表达式后可表示调用，也可用于运算分组、元组或类的基类声明；应结合当前语句。</li>
+<li>逗号分隔参数、元素或解包目标，项目的先后顺序可能决定字段或维度对应。</li>
+<li>行首缩进说明它处于某个函数、循环、分支或括号续行中；不要仅看视觉对齐就判断执行次数。</li>
+</ul></details></td></tr></tbody></table></div><details class="historical"><summary>原书保存的历史输出 · 本次未运行</summary><p class="muted">以下内容原本就在 Notebook 文件中；其中的数字、图、警告与耗时不代表你当前电脑的运行结果。</p><p class="muted">原文件没有为本格保存输出。这里不填造运行结果。</p></details><div class="cell-nav"><a href="#cell-34">← 上一格代码</a><a href="#cell-38">下一格代码 →</a></div></article><details class="original" id="original-37"><summary>原单元格 37 · 原书说明</summary><div class="original-content"><p>The generated dataset is also available from Github at <code>https://github.com/Fraud-Detection-Handbook/simulated-data-transformed</code>.</p></div></details><article class="cell" id="cell-38" data-cell="38"><div class="tag">原单元格 38 · 0 行 · 静态逐行解析</div><h2 class="cell-title">空代码单元格</h2><p>原文件中的空代码单元格，保留位置。它没有待执行语句，也没有需要补造的结果。</p></article><footer class="foot">原书：Fraud Detection Handbook；作者 Yann-Aël Le Borgne、Wissam Siblini、Bertrand Lebichot、Gianluca Bontempi。原书代码依 GPL v3，原文/图片依 CC BY-SA 4.0；本地原许可见 <a href="../LICENSE-原书.txt">LICENSE-原书.txt</a>。中文解析为本次新增、改编说明，代码保持原样。<a href="https://fraud-detection-handbook.github.io/fraud-detection-handbook/">原书官网</a>。</footer></main></div></body></html>

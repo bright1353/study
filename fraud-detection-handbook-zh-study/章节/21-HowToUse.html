@@ -1,0 +1,93 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>原书使用方法｜源码逐行精读</title><link rel="stylesheet" href="../assets/reading.css"><script>window.MathJax={"tex": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "displayMath": [["$$", "$$"], ["\\[", "\\]"]], "processEscapes": true}, "options": {"skipHtmlTags": ["script", "noscript", "style", "textarea", "pre", "code"]}, "svg": {"fontCache": "local"}};</script><script defer src="../assets/mathjax-tex-svg-full.js"></script><script defer src="../assets/reading.js"></script></head><body><div class="top"><a href="../开始精读.html">← 全课程目录</a><span>源代码逐行精读 / 21</span><a href="#top">回到页首</a></div><div class="shell"><aside class="sidebar"><label for="toc-filter">查找本页函数或代码</label><input id="toc-filter" data-toc-filter placeholder="例如 append / get_train"><div class="search-status">共 2 个原始代码单元格</div><a data-toc-item href="#cell-2"><span class="mini">原单元格 2</span><br>print(&#x27;Hello world!&#x27;)</a><a data-toc-item href="#cell-4"><span class="mini">原单元格 4</span><br>空代码单元格</a></aside><main class="main"><header class="hero" id="top"><div class="kicker">SOURCE READING · 21</div><h1>原书使用方法</h1><p><code>Chapter_1_BookContent/HowToUse.ipynb</code></p><div class="facts"><span class="pill">2 个代码单元格</span><span class="pill">1 行原始代码</span><span class="pill">原顺序 · 原代码 · 原输出</span></div><p>本页按原 Notebook 顺序保留原文、代码和历史输出。没有代码的页面主要用于解释数据可得性和实验范围。</p><a class="jump" href="../精读笔记本/Chapter_1_BookContent/HowToUse.%E7%B2%BE%E8%AF%BB.ipynb">打开对应 .ipynb 阅读副本</a><div class="notice"><strong>阅读标记：</strong>每个“原单元格”编号是原文件位置，不是 In[n] 执行计数。函数体说明指实际调用到那一行时的行为。手工例子与原书历史输出明确分开；本次未运行原教材、未改动原项目。</div></header><details class="original" id="original-1"><summary>原单元格 1 · How to use this book</summary><div class="original-content"><p>(How_to_Use_This_Book)=</p>
+<h1>How to use this book</h1>
+<p>This book is a <a href="https://jupyterbook.org/intro.html">Jupyter Book</a>, which allows you to interactively execute, reproduce, or modify the sections of this book that contain code. This chapter provides an overview of what Jupyter books are, and how they allow their content to be reproducible. </p>
+<h2>Jupyter book project</h2>
+<p>The Jupyter Book project is an open-source project. It is developed by the <a href="https://executablebooks.org/en/latest/">Executable Book Project</a>, which is an <a href="https://executablebooks.org/en/latest/about.html">international collaboration between several universities and other open-source projects</a>. </p>
+<p>Under the hood, a Jupyter Book is essentially a collection of markdown files and Jupyter notebooks. These files are compiled together according to the configuration and table of content specifications. You can follow the Github icon at the top of this page to see the source code for this book. </p>
+<h2>Book layout</h2>
+<p>The book layout provides five main zones:</p>
+<ol>
+<li>The search tool (top left): It allows finding all sections of the book that contains a particular term.</li>
+<li>The table of content (left panel): It allows navigating between the different chapters and main sections of the book.</li>
+<li>The external links (top): It contains icons for launching notebooks, switching to full-screen mode, accessing the Github repository, or downloading the content of the current section.</li>
+<li>The main panel (center): The content of the current section.</li>
+<li>The section content (Right panel): It allows navigating in the subsections of the current section. </li>
+</ol>
+<h2>Reproducibility</h2>
+<p>All sections that contain code (Jupyter notebooks), such as this section, will have a shuttle icon in the external links, allowing to run the notebook on the cloud. Two services are provided: Google Colab, and Binder. We briefly describe these two services below, with their pros and cons. </p>
+<h3>Google Colab</h3>
+<p><a href="https://colab.research.google.com/notebooks/intro.ipynb#">Google Colab</a> is a service provided by Google Research and requires to have a Google account. It allows to run Python notebooks for free on Google cloud. </p>
+<p>The computational resources provided by Google Colab can fluctuate. They depend on available Google resources, as well as your usage of the service (intense use may lead to lower resources). You may however expect to have one core, and a few gigabytes of RAM. Google Colab also provides a free GPU, whose model may vary depending on available resources. Provided GPU models often include Nvidia K80s, T4s, P4s, or P100s. See this <a href="https://research.google.com/colaboratory/faq.html?hl=ko-KRUbuntu">link</a> for more details on the resources that Google can provide. </p>
+<h3>Binder</h3>
+<p><a href="https://mybinder.readthedocs.io/en/latest/index.html">Binder</a> {cite}<code>beg2021using</code> allows to create, use and share custom computing environments. It is powered by <a href="https://github.com/jupyterhub/binderhub">BinderHub</a>, which is an open-source tool that deploys the Binder service in the cloud. </p>
+<p>Notebooks may be launched and run for free, thanks to the <a href="https://mybinder.readthedocs.io/en/latest/about/federation.html">BinderHub Federation</a>, currently supported by Google Cloud Platform, OVH, GESIS notebooks, and the Alan Turing Institute. BinderHub relies on <a href="https://github.com/jupyterhub/repo2docker">Repo2Docker</a> to generate docker images from a Git repository, and <a href="https://github.com/jupyterhub/jupyterhub">JupyterHub</a> to run and share notebooks. </p>
+<p>It takes usually around one or two minutes for Binder to create a Docker container and start serving a notebook. The <code>environment.yml</code> file, present at the root of the Github book repository, is used to specify which Python libraries must be installed in the docker container. </p>
+<p>As with Google Colab, the resources provided for free by the BinderHub Federation fluctuate. See the <a href="https://mybinder.readthedocs.io/en/latest/about/about.html">Binder user guide</a> and <a href="https://mybinder.readthedocs.io/en/latest/about/user-guidelines.html">Binder user guidelines</a> for more details on the resources that the BinderHub Federation can provide. </p>
+<h3>Pros and cons</h3>
+<p>A summary of the features of Google Colab and Binder is provided below. </p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Google Colab</th>
+<th>Binder</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Registration</td>
+<td>Requires a Google login</td>
+<td>None</td>
+</tr>
+<tr>
+<td>CPU resources</td>
+<td>Fluctuate</td>
+<td>Fluctuate</td>
+</tr>
+<tr>
+<td>RAM resources</td>
+<td>Fluctuate</td>
+<td>Fluctuate</td>
+</tr>
+<tr>
+<td>GPU resources</td>
+<td>Fluctuate. Often includes Nvidia K80s, T4s, P4s, or P100s</td>
+<td>None</td>
+</tr>
+<tr>
+<td>Session duration</td>
+<td>Up to 12 hours</td>
+<td>Up to 12 hours</td>
+</tr>
+<tr>
+<td>Environment</td>
+<td>Python 3.6</td>
+<td>Customizable with environment.yml file</td>
+</tr>
+</tbody>
+</table>
+<p>In our experience, Google Colab execution times are about twice as fast as Binder. </p>
+<p>This summary reflects the status of the two services at the time of the writing of this section (January 2021). The features of these two services are however expected to evolve in the short future.  </p>
+<h3>Try it!</h3>
+<p>Open this notebook using either Google Colab or Binder to execute the following cell:</p></div></details><article class="cell" id="cell-2" data-cell="2"><div class="tag">原单元格 2 · 1 行 · 静态逐行解析</div><h2 class="cell-title">print(&#x27;Hello world!&#x27;)</h2><p><strong>这格解决什么：</strong> 沿原笔记本顺序理解这格的输入、调用与结果。</p><div class="states"><div class="state"><strong>执行前</strong><p>按前文准备好本格所依赖的库与对象；只阅读页面不会改变 Notebook 状态。</p></div><div class="state"><strong>执行后</strong><p>是否产生新对象、改变原对象或只是显示，见每行“动作与状态变化”。本解析不推断未知运行数值。</p></div></div><h3>原代码 · 保持原样</h3><pre class="source"><span class="sr-only">原始代码，行号仅供定位。</span><span class="code-line"><span class="line-no">001</span><code>print(&#x27;Hello world!&#x27;)</code></span></pre><div class="walkthrough"><h3>接口与阅读顺序</h3><p>下面逐行保留原代码，并说明右侧先计算什么、左侧接住什么，以及对象是否原地改变。若本格只是展示表或画图，应回到最近一次赋值寻找数据来源；原书保存的输出可在末尾展开核对。</p></div><h3>一行一行读 · 可展开符号解释</h3><div class="line-table-wrap"><table class="line-table"><thead><tr><th>原始代码 · 逐行定位</th><th>动作与状态变化</th></tr></thead><tbody><tr id="cell-2-line-1"><td class="codecell"><a class="row-label" href="#cell-2-line-1">第 1 行</a><pre><code>print(&#x27;Hello world!&#x27;)</code></pre></td><td><p class="scope">处于单元格顶层；真正执行本cell并到达此语句时才发生，静态精读本身不执行代码</p><p>把结果显示出来；显示本身不等于将结果交给另一个变量。传入：位置参数1是 <code>'Hello world!'</code>。</p><p>本行没有用等号把返回值另存到名称。若是对象方法可能有副作用；若是单元格最后一个表达式，Jupyter通常会显示其返回结果。</p><ul>
+<li>求值 <code>print('Hello world!')</code>：把结果显示出来；显示本身不等于将结果交给另一个变量。传入：位置参数1是 <code>'Hello world!'</code></li>
+</ul><ul>
+<li>调用 <code>print</code> 时的位置参数1：<code>'Hello world!'</code>；先求出该表达式再传入</li>
+</ul><details class="syntax"><summary>展开这一行的符号与名称</summary><ul>
+<li>圆括号在可调用表达式后可表示调用，也可用于运算分组、元组或类的基类声明；应结合当前语句。</li>
+</ul></details></td></tr></tbody></table></div><details class="historical"><summary>原书保存的历史输出 · 本次未运行</summary><p class="muted">以下内容原本就在 Notebook 文件中；其中的数字、图、警告与耗时不代表你当前电脑的运行结果。</p><pre class="historic-text">Hello world!
+</pre></details><div class="cell-nav"><span></span><a href="#cell-4">下一格代码 →</a></div></article><details class="original" id="original-3"><summary>原单元格 3 · Local execution and book compilation</summary><div class="original-content"><h2>Local execution and book compilation</h2>
+<p>This is an open-source book, and the code is made <a href="https://github.com/Fraud-Detection-Handbook/fraud-detection-handbook">available on GitHub</a> (or by following the GitHub icon in the external links at the top of this page). You may run the book notebooks on your computer by cloning the GitHub repository. </p>
+<p>You may also recompile the book. Compiling the book will first require you to <a href="https://jupyterbook.org/intro.html#install-jupyter-book">install Jupyter Book</a>.</p>
+<p>Once done, this is a two-step process:</p>
+<ol>
+<li>Clone the book repository:</li>
+</ol>
+<pre><code>git clone https://github.com/Fraud-Detection-Handbook/fraud-detection-handbook
+</code></pre>
+<ol start="2">
+<li>Compile the book</li>
+</ol>
+<pre><code>jupyter-book build fraud-detection-handbook
+</code></pre>
+<p>The book will be available locally at <code>fraud-detection-handbook/_build/html/index.html</code>.</p></div></details><article class="cell" id="cell-4" data-cell="4"><div class="tag">原单元格 4 · 0 行 · 静态逐行解析</div><h2 class="cell-title">空代码单元格</h2><p>原文件中的空代码单元格，保留位置。它没有待执行语句，也没有需要补造的结果。</p></article><footer class="foot">原书：Fraud Detection Handbook；作者 Yann-Aël Le Borgne、Wissam Siblini、Bertrand Lebichot、Gianluca Bontempi。原书代码依 GPL v3，原文/图片依 CC BY-SA 4.0；本地原许可见 <a href="../LICENSE-原书.txt">LICENSE-原书.txt</a>。中文解析为本次新增、改编说明，代码保持原样。<a href="https://fraud-detection-handbook.github.io/fraud-detection-handbook/">原书官网</a>。</footer></main></div></body></html>

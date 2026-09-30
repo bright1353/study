@@ -1,0 +1,15 @@
+信用卡欺诈检测源码逐行精读
+生成日期：2026-09-30
+
+先双击“开始精读.html”。离线阅读无需启动服务。
+代码和物理行顺序与原书一致。原单元格编号包含Markdown和空单元格，不是In[n]。
+精读笔记本文件夹提供插入中文说明的ipynb副本，原代码及历史输出完整保留。
+原书资源保存原说明、图片和公共Python文件用于对照。
+本次未执行原教材、未改动原项目，未安装依赖。
+手工例子有明确标记；已有输出均为原书历史记录。
+
+原作者：Yann-Aël Le Borgne、Wissam Siblini、Bertrand Lebichot、Gianluca Bontempi。
+原代码GPL v3；原文和图片CC BY-SA 4.0；新增中文解析按CC BY-SA 4.0提供，属于教学改编而非原作者审定版本。
+原站：https://fraud-detection-handbook.github.io/fraud-detection-handbook/
+原仓库：https://github.com/Fraud-Detection-Handbook/fraud-detection-handbook
+MathJax按其附带Apache-2.0许可分发。

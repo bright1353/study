@@ -1,0 +1,4 @@
+
+document.querySelectorAll('[data-toc-filter]').forEach(input=>{input.addEventListener('input',()=>{const q=input.value.toLowerCase().trim();let count=0;document.querySelectorAll('[data-toc-item]').forEach(a=>{const show=!q||a.textContent.toLowerCase().includes(q);a.hidden=!show;if(show)count++});const s=document.querySelector('.search-status');if(s)s.textContent='目录匹配 '+count+' 个代码单元格';})});
+function exposeAnchor(){const id=decodeURIComponent(location.hash.slice(1));if(!id)return;const target=document.getElementById(id);if(!target)return;let p=target.parentElement;while(p){if(p.tagName==='DETAILS')p.open=true;p=p.parentElement;}requestAnimationFrame(()=>target.scrollIntoView({block:'start',behavior:'auto'}));}
+addEventListener('hashchange',exposeAnchor);addEventListener('load',()=>{exposeAnchor();if(window.MathJax?.startup?.promise)MathJax.startup.promise.then(exposeAnchor);});
